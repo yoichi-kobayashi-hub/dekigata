@@ -101,6 +101,9 @@ function today(){const d=new Date();return`${d.getFullYear()}-${String(d.getMont
 function crit(f,m){const meta=m||FM[f];if(!meta)return"";let p=[];if(meta.minus!==null)p.push(`-${meta.minus}`);if(meta.plus!==null)p.push(`+${meta.plus}`);return p.join("/");}
 
 export default function App(){
+  const[locked,setLocked]=useState(true);
+  const[keyword,setKeyword]=useState("");
+  const[kwError,setKwError]=useState(false);
   const[screen,setScreen]=useState("setup");
   const[pipeType,setPipeType]=useState("DCIP");
   const[roadType,setRoadType]=useState("shidou");
@@ -195,6 +198,25 @@ export default function App(){
     const a=document.createElement("a");a.href=url;a.download=`出来形_${header.projectName||"data"}_${today()}.csv`;a.click();
     URL.revokeObjectURL(url);setToast("ダウンロード完了");setTimeout(()=>setToast(""),3000);
   };
+
+  // ═══ LOCK SCREEN ═══
+  if(locked){
+    const tryUnlock=()=>{
+      if(keyword.toLowerCase()==="shinano"||keyword==="信濃"){setLocked(false);setKwError(false);}
+      else{setKwError(true);setKeyword("");}
+    };
+    return(<div style={{...S.w,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"80vh"}}>
+      <div style={{fontSize:40,marginBottom:16}}>🔒</div>
+      <h1 style={{fontSize:20,fontWeight:700,marginBottom:4}}>出来形かんたん</h1>
+      <div style={{fontSize:12,color:"#888",marginBottom:24}}>関係者専用</div>
+      <input style={{...S.inp,width:220,textAlign:"center",fontSize:18,letterSpacing:2}}
+        value={keyword} onChange={e=>setKeyword(e.target.value)}
+        onKeyDown={e=>{if(e.key==="Enter")tryUnlock();}}
+        placeholder="キーワード" autoFocus/>
+      {kwError&&<div style={{fontSize:12,color:"#C62828",marginTop:8}}>キーワードが違います</div>}
+      <button style={{...S.pri,width:220,marginTop:12}} onClick={tryUnlock}>入場</button>
+    </div>);
+  }
 
   // ═══ SETUP ═══
   if(screen==="setup"){const dias=getDias(pipeType);return(<div style={S.w}>
