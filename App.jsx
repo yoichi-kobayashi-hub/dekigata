@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import jsPDF from "jspdf";
 
 const OD_DCIP={75:93.0,100:118.0,150:169.0,200:220.0,250:271.6,300:322.8,400:425.6};
 const OD_HPPE={75:89.0,100:114.0,150:165.0};
@@ -70,260 +69,132 @@ function today(){const d=new Date();return`${d.getFullYear()}-${String(d.getMont
 function nowTime(){return new Date().toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"});}
 
 // ═══════════════════════════════════════
-// PDF出力
+// PDF出力（印刷ベース）
 // ═══════════════════════════════════════
 function generatePDF({header,pipeType,roadType,surfaceType,design,points,steps,dia,od,D,H0}){
-  const doc=new jsPDF("p","mm","a4");
-  const W=210,H=297,M=10;
   const allItems=["B","Ba","H","t1","t2","t3","t4","t5","t6","ta","D","Hs","Dm"];
   const road=ROADS.find(r=>r.key===roadType);
-
-  const calcDesignH=(sid)=>{
-    if(sid===1)return H0;
-    const bStep=steps.find(s=>s.tKey==="t0");
-    if(bStep&&sid===bStep.id)return H0-(Number(design.t0)||0);
-    let h=D;let ap=false;
-    for(const s of steps){if(s.inputs.includes("D")){ap=true;continue;}if(!ap)continue;if(s.id>sid)break;if(s.tKey&&s.tKey!=="t0"&&design[s.tKey])h-=Number(design[s.tKey]);}
-    return Math.round(h);
-  };
-  const dv=(f,sid)=>{if(f==="H")return calcDesignH(sid);if(f==="B")return design.B?Number(design.B):null;if(f==="Ba")return design.Ba?Number(design.Ba):null;if(f==="D")return D;if(f==="ta")return Number(design.ta)||40;if(f==="Hs")return 300;if(f==="Dm")return 700;return design[f]?Number(design[f]):null;};
-
   const designVals={};
   allItems.forEach(it=>{
-    if(it==="H")designVals[it]=H0;
-    else if(it==="D")designVals[it]=D;
+    if(it==="H")designVals[it]=H0;else if(it==="D")designVals[it]=D;
     else if(it==="B")designVals[it]=design.B?Number(design.B):null;
     else if(it==="Ba")designVals[it]=design.Ba?Number(design.Ba):null;
     else if(it==="ta")designVals[it]=Number(design.ta)||40;
-    else if(it==="Hs")designVals[it]=300;
-    else if(it==="Dm")designVals[it]=700;
+    else if(it==="Hs")designVals[it]=300;else if(it==="Dm")designVals[it]=700;
     else designVals[it]=design[it]?Number(design[it]):null;
   });
+  const judgeItem=(it,mv)=>{if(mv===null||designVals[it]===null)return"";const err=mv-designVals[it];const meta=FM[it];if(!meta)return"";if(meta.minus!==null&&err<-meta.minus)return"×";if(meta.plus!==null&&err>meta.plus)return"×";return"○";};
+  const getMeasured=(pt,it)=>{for(const s of steps){const k=`${s.id}_${it}`;if(pt.measured[k]!==undefined&&pt.measured[k]!=="")return Number(pt.measured[k]);for(const ex of s.extra){if(ex.key===it){const ek=`${s.id}_${it}`;if(pt.measured[ek]!==undefined&&pt.measured[ek]!=="")return Number(pt.measured[ek]);}}}return null;};
 
-  // ── 豆図描画 ──
-  function drawMamizu(doc,ox,oy,w,h){
-    const layers=[
-      {t:40,n:"AS"},{t:Number(design.t6)||150,n:"路盤"},{t:Number(design.t5)||150,n:"路盤"},
-      {t:Number(design.t4)||160,n:"発生土"},{t:Number(design.t3)||200,n:"発生土"},
-      {t:Number(design.t2)||200,n:"発生土"},{t:Number(design.t1)||100,n:"保護砂"},{t:od,n:"管"},
-    ];
-    if(pipeType==="HPPE")layers.push({t:100,n:"基礎砂"});
-    const total=layers.reduce((s,l)=>s+l.t,0);
-    doc.setDrawColor(60);doc.setLineWidth(0.3);doc.rect(ox,oy,w,h);
-    let y=oy;let pipeY=0,pipeLh=0,bt23=0;
-    layers.forEach((l,i)=>{
-      const lh=h*(l.t/total);
-      doc.setDrawColor(180);doc.setLineWidth(0.1);doc.rect(ox,y,w,lh);
-      doc.setFontSize(5);doc.setTextColor(100);
-      if(lh>3)doc.text(l.n,ox+w/2,y+lh/2+1,{align:"center"});
-      if(l.n==="管"){pipeY=y;pipeLh=lh;}
-      if(i===4)bt23=y+lh;
-      y+=lh;
-    });
-    const pr=pipeLh/2,pcx=ox+w/2,pcy=pipeY+pipeLh/2;
-    doc.setDrawColor(60);doc.setLineWidth(0.2);doc.circle(pcx,pcy,pr);
-    doc.setDrawColor(30);doc.setLineWidth(0.3);
-    doc.line(pcx-pr*0.8,bt23,pcx+pr*0.8,bt23);
-    doc.line(pcx,bt23-3,pcx,bt23+2.5);
-    doc.line(pcx-1.5,bt23-3,pcx+1.5,bt23-3);
-    const rx=ox+w+2;
-    doc.setFontSize(4);doc.setTextColor(60);
-    doc.line(rx+8,oy,rx+8,oy+h);doc.text("H",rx+9,(oy+oy+h)/2);
-    doc.line(rx+4,oy,rx+4,pipeY);doc.text("D",rx+5,(oy+pipeY)/2);
-    const hsY=oy+h*(700/total);
-    doc.line(rx,pipeY,rx,hsY);doc.text("Hs",rx+1,(pipeY+hsY)/2);
-    doc.line(rx+12,oy,rx+12,hsY);doc.text("Dm",rx+13,(oy+hsY)/2);
-    doc.setFontSize(4);doc.text("Ba",ox+w/2,oy-1,{align:"center"});
-    doc.text("B",ox+w/2,oy+h+3,{align:"center"});
-  }
+  const css=`*{margin:0;padding:0;box-sizing:border-box}body{font-family:"Hiragino Sans","MS Gothic",sans-serif;font-size:9px;color:#000}
+@media print{@page{size:A4 portrait;margin:8mm}}.page{page-break-after:always;width:100%;max-width:190mm;margin:0 auto;padding:4mm 0}
+table{border-collapse:collapse;width:100%}td,th{border:0.5px solid #333;padding:2px 3px;font-size:8px;vertical-align:middle}
+.lbl{background:#f5f5f0;text-align:center;font-weight:bold;font-size:7px;color:#333}
+.title{font-size:14px;font-weight:bold;text-align:center;letter-spacing:4px;padding:4px 0 6px}
+.seal{text-align:center;font-size:6px;color:#666;width:40px}.seal-box{height:20px}
+.mid{display:grid;grid-template-columns:55% 45%;border:0.5px solid #333}
+.mid-l{border-right:0.5px solid #333;padding:4px;text-align:center}.mid-r{padding:4px;font-size:7px}
+.mid-r table td{font-size:7px;padding:1px 3px}
+.chk{border:0.5px solid #333;padding:2px 4px;font-size:7px;color:#333;margin-top:-0.5px}
+.dt td,.dt th{font-size:7px;text-align:center;height:12px;padding:1px 2px}
+.dt th{background:#f5f5f0;font-size:6px}.dt .no{font-weight:bold;background:#fafaf5}
+.dt .itm{text-align:left;padding-left:4px;color:#555}.dt .sep{border-left:1.5px solid #000}
+.ok{color:#006633}.ng{color:#cc0000;font-weight:bold}
+.note{font-size:6px;color:#666;padding:1px 0}
+.step-page{page-break-after:always;padding:2mm 0}
+.step-hdr{font-size:10px;font-weight:bold;margin-bottom:3mm;display:flex;justify-content:space-between}
+.step-card{border:0.5px solid #333;margin-bottom:3mm;padding:3mm;display:grid;grid-template-columns:1fr 1fr;gap:3mm}
+.step-photo{aspect-ratio:4/3;border:0.5px solid #ccc;display:flex;align-items:center;justify-content:center;font-size:8px;color:#ccc}
+.step-info{font-size:7px}.step-info table td{font-size:7px;padding:1px 2px}
+.step-title{font-weight:bold;font-size:8px;margin-bottom:2mm}
+.ftr{font-size:6px;color:#888;display:flex;justify-content:space-between;margin-top:2mm}`;
 
-  // ── 表紙ページ ──
-  function drawCoverPage(doc,ptL,ptR,pgNum,totalPg){
-    doc.setFontSize(12);doc.setTextColor(0);
-    doc.text("検 査 記 録 表",W/2,M+6,{align:"center"});
+  let html=`<html><head><meta charset="utf-8"><title>出来形_${header.projectName||""}</title><style>${css}</style></head><body>`;
 
-    let ty=M+10;const lm=M,cw=W-2*M;
-    doc.setFontSize(7);doc.setDrawColor(80);doc.setLineWidth(0.2);
-    const rows=[
-      ["工 事 名",header.projectName||""],
-      ["工事箇所",header.location||""],
-      ["工　　種","配管工"],
-      ["種　　別",`床掘検測（${PL[pipeType]} φ${dia}）`],
-    ];
-    rows.forEach(r=>{
-      doc.rect(lm,ty,22,6);doc.rect(lm+22,ty,cw-22,6);
-      doc.setTextColor(100);doc.text(r[0],lm+2,ty+4);
-      doc.setTextColor(0);doc.text(r[1],lm+24,ty+4);
-      ty+=6;
-    });
-    const sealX=W-M-60;
-    ["総括監督員","主任監督員","監督員"].forEach((s,i)=>{
-      const sx=sealX+i*20;
-      doc.rect(sx,M+10,20,6);doc.rect(sx,M+16,20,12);
-      doc.setFontSize(5);doc.setTextColor(100);doc.text(s,sx+10,M+14,{align:"center"});
-    });
-    doc.rect(sealX,M+28,30,6);doc.setFontSize(5);doc.text("主任技術者",sealX+2,M+32);
-
-    const mzTop=ty+2;const mzH=60;const mzW=55;
-    drawMamizu(doc,lm+5,mzTop,mzW,mzH);
-
-    const crX=lm+mzW+25;const crTop=mzTop;
-    doc.setFontSize(6);doc.setTextColor(0);doc.text("管理基準",crX+20,crTop+3,{align:"center"});
-    doc.setLineWidth(0.15);
-    const crItems=[["項目","-mm","+mm"],["床付幅B","-50",""],["舗装幅Ba","-25",""],["掘削深H","-30","30"],["埋戻厚tn","-30","30"],["舗装厚ta","-7",""],["埋設深D","-30","30"],["Hs※1","-30","30"],["Dm※2","-30","30"]];
-    let cry=crTop+5;
-    crItems.forEach(r=>{
-      doc.setFontSize(5);doc.setTextColor(r[0]==="項目"?100:0);
-      doc.rect(crX,cry,25,4);doc.rect(crX+25,cry,12,4);doc.rect(crX+37,cry,12,4);
-      doc.text(r[0],crX+1,cry+3);doc.text(r[1],crX+31,cry+3,{align:"center"});doc.text(r[2],crX+43,cry+3,{align:"center"});
-      cry+=4;
-    });
-    doc.setFontSize(4);doc.setTextColor(100);
-    doc.text("※1 埋設シート位置 管上0.3m",crX,cry+3);
-    doc.text("※2 マーカー位置 DP=0.70m",crX,cry+6);
-
-    let dy=mzTop+mzH+4;
-    doc.setFontSize(5);doc.setTextColor(100);
-    doc.text("検測区分（いずれかに○）・段階確認　・出来形管理（段階確認以外）　・その他（　　　）",lm,dy+3);
-    dy+=5;
-
-    doc.setLineWidth(0.15);doc.setDrawColor(80);
-    const colW=[16,14,14,12,14,10];
-    const th=["測点","設計","検測","誤差","日付","判定"];
-    const drawRow=(x,y,vals,isHdr)=>{
-      let cx=x;
-      vals.forEach((v,i)=>{
-        const cw2=colW[i];
-        doc.rect(cx,y,cw2,4);
-        doc.setFontSize(isHdr?4.5:5);
-        doc.setTextColor(isHdr?100:0);
-        if(v==="○")doc.setTextColor(0,100,50);
-        if(v==="×")doc.setTextColor(200,0,0);
-        doc.text(String(v),cx+cw2/2,y+3,{align:"center"});
-        cx+=cw2;
-      });
-    };
-    const halfW=colW.reduce((s,w2)=>s+w2,0);
-    drawRow(lm,dy,th,true);drawRow(lm+halfW+2,dy,th,true);dy+=4;
-
-    const drawPtData=(pt,x,startY)=>{
-      if(!pt)return;
-      let yy=startY;
-      doc.setFontSize(5);doc.setTextColor(0);
-      drawRow(x,yy,[pt.name,"","","","",""],false);yy+=4;
-      allItems.forEach(it=>{
-        const dVal=designVals[it];if(dVal===null)return;
-        const key=steps.find(s=>s.inputs.includes(it))?`${steps.find(s=>s.inputs.includes(it)).id}_${it}`:`1_${it}`;
-        let mv=null;
-        for(const s of steps){
-          const k=`${s.id}_${it}`;
-          if(pt.measured[k]!==undefined&&pt.measured[k]!==""){mv=Number(pt.measured[k]);break;}
-          for(const ex of s.extra){if(ex.key===it){const ek=`${s.id}_${it}`;if(pt.measured[ek]!==undefined&&pt.measured[ek]!=="")mv=Number(pt.measured[ek]);}}
-        }
-        const err=mv!==null?mv-dVal:null;
-        const j=err!==null?judge(err,it):null;
-        drawRow(x,yy,[it,dVal,mv!==null?mv:"",err!==null?(err>0?"+":"")+err:"",pt.date||"",j||""],false);
-        yy+=4;
-      });
-    };
-    drawPtData(ptL,lm,dy);drawPtData(ptR,lm+halfW+2,dy);
-
-    doc.setFontSize(4);doc.setTextColor(150);
-    doc.text(`${pgNum} / ${totalPg}`,W-M,H-M+2,{align:"right"});
-    doc.text("有限会社信濃住宅設備",lm,H-M+2);
-  }
-
-  // ── 工程シート（3分割） ──
-  function drawStepSheet(doc,step,pt,ox,oy,sw,sh,stepIdx){
-    doc.setDrawColor(100);doc.setLineWidth(0.15);doc.rect(ox,oy,sw,sh);
-    doc.setFontSize(6);doc.setTextColor(0);
-    doc.text(`${pt.name}  ${step.id}.${step.name}`,ox+2,oy+4);
-    doc.setFontSize(4);doc.setTextColor(100);
-    doc.text(pt.date||"",ox+sw-2,oy+4,{align:"right"});
-
-    const photoW=sw*0.45,photoH=sh*0.45;
-    doc.setDrawColor(180);doc.rect(ox+2,oy+6,photoW,photoH);
-    doc.setFontSize(5);doc.setTextColor(180);doc.text("写真",ox+2+photoW/2,oy+6+photoH/2,{align:"center"});
-
-    const mzX=ox+photoW+6,mzW=sw-photoW-10,mzH=photoH;
-    drawMamizu(doc,mzX,oy+6,mzW,mzH);
-
-    let dy=oy+6+photoH+3;
-    doc.setLineWidth(0.1);doc.setDrawColor(120);
-    const cols=[18,16,16,14,10];
-    const hdr=["項目","設計","実測","誤差","判定"];
-    let cx=ox+2;
-    hdr.forEach((h2,i)=>{doc.rect(cx,dy,cols[i],3.5);doc.setFontSize(4);doc.setTextColor(100);doc.text(h2,cx+cols[i]/2,dy+2.5,{align:"center"});cx+=cols[i];});
-    dy+=3.5;
-
-    step.inputs.forEach(f=>{
-      const d2=dv(f,step.id);const key=`${step.id}_${f}`;const mv=pt.measured[key]??"";
-      const err=d2!==null&&mv!==""?Number(mv)-d2:null;const j=err!==null?judge(err,f):null;
-      cx=ox+2;
-      const vals=[f,d2!==null?Math.round(d2):"",mv,err!==null?(err>0?"+":"")+err:"",j||""];
-      vals.forEach((v,i)=>{
-        doc.rect(cx,dy,cols[i],3.5);doc.setFontSize(4.5);
-        doc.setTextColor(v==="○"?[0,100,50]:v==="×"?[200,0,0]:[0,0,0]);
-        doc.text(String(v),cx+cols[i]/2,dy+2.5,{align:"center"});cx+=cols[i];
-      });
-      dy+=3.5;
-    });
-
-    if(step.tKey){
-      const tD=design[step.tKey]?Number(design[step.tKey]):null;
-      let tM=null;
-      if(step.prevRef!==null){
-        let pv;
-        if(step.prevRef==="D"){const ds=steps.find(s=>s.inputs.includes("D"));pv=ds?pt.measured[`${ds.id}_D`]:null;}
-        else pv=pt.measured[`${step.prevRef}_H`];
-        const ch=pt.measured[`${step.id}_H`];
-        if(pv&&pv!==""&&ch&&ch!=="")tM=Number(pv)-Number(ch);
-      }
-      const tErr=tM!==null&&tD!==null?tM-tD:null;const tJ=tErr!==null?judge(tErr,step.tKey):null;
-      cx=ox+2;
-      [step.tKey,tD,tM!==null?tM:"",tErr!==null?(tErr>0?"+":"")+tErr:"",tJ||""].forEach((v,i)=>{
-        doc.rect(cx,dy,cols[i],3.5);doc.setFontSize(4.5);
-        doc.setTextColor(v==="○"?[0,100,50]:v==="×"?[200,0,0]:[0,0,0]);
-        doc.text(String(v),cx+cols[i]/2,dy+2.5,{align:"center"});cx+=cols[i];
-      });dy+=3.5;
-    }
-
-    step.extra.forEach(ex=>{
-      const key=`${step.id}_${ex.key}`;const mv=pt.measured[key]??"";
-      const err=mv!==""?Number(mv)-ex.design:null;const j=err!==null?judge(err,ex.key,ex):null;
-      cx=ox+2;
-      [ex.key,ex.design,mv,err!==null?(err>0?"+":"")+err:"",j||""].forEach((v,i)=>{
-        doc.rect(cx,dy,cols[i],3.5);doc.setFontSize(4.5);
-        doc.setTextColor(v==="○"?[0,100,50]:v==="×"?[200,0,0]:[0,0,0]);
-        doc.text(String(v),cx+cols[i]/2,dy+2.5,{align:"center"});cx+=cols[i];
-      });dy+=3.5;
-    });
-  }
-
-  // ── PDF生成実行 ──
   const coverPages=Math.ceil(points.length/2);
   for(let p=0;p<coverPages;p++){
-    if(p>0)doc.addPage();
-    drawCoverPage(doc,points[p*2],points[p*2+1]||null,p+1,coverPages);
+    const ptL=points[p*2];const ptR=points[p*2+1]||null;
+    html+=`<div class="page"><div class="title">検 査 記 録 表</div>`;
+    html+=`<table><tr><td class="lbl" style="width:60px">工 事 名</td><td colspan="4">${header.projectName||""}</td>`;
+    html+=`<td class="seal">総括監督員<div class="seal-box"></div></td><td class="seal">主任監督員<div class="seal-box"></div></td><td class="seal">監督員<div class="seal-box"></div></td></tr>`;
+    html+=`<tr><td class="lbl">工事箇所</td><td colspan="7">${header.location||""}</td></tr>`;
+    html+=`<tr><td class="lbl">工　　種</td><td colspan="7">配管工</td></tr>`;
+    html+=`<tr><td class="lbl">種　　別</td><td colspan="4">${PL[pipeType]} φ${dia}</td><td class="lbl" style="font-size:6px">主任技術者</td><td colspan="2"></td></tr></table>`;
+
+    html+=`<div class="mid"><div class="mid-l"><div style="font-size:7px;color:#666;margin-bottom:2px">検測位置図</div>`;
+    html+=`<div style="font-size:8px">Ba<br>┌────────────┐<br>`;
+    const layerNames=["ta AS(40)","t6 路盤(150)","t5 路盤(150)","t4 発生土(160)","t3 発生土(200)","t2 発生土(200)","t1 保護砂(100)","　　管 φ"+dia+"(OD"+od+")"];
+    if(pipeType==="HPPE")layerNames.push("t0 基礎砂(100)");
+    layerNames.forEach(l=>{html+=`│ ${l}<br>`;});
+    html+=`└────────────┘<br>B</div></div>`;
+
+    html+=`<div class="mid-r"><div style="font-weight:bold;text-align:center;margin-bottom:2px">管理基準</div>`;
+    html+=`<table><tr><th>項目</th><th style="width:25px">-mm</th><th style="width:25px">+mm</th></tr>`;
+    html+=`<tr><td>床付幅B</td><td>-50</td><td></td></tr><tr><td>舗装幅Ba</td><td>-25</td><td></td></tr>`;
+    html+=`<tr><td>掘削深H</td><td>-30</td><td>30</td></tr><tr><td>埋戻厚tn</td><td>-30</td><td>30</td></tr>`;
+    html+=`<tr><td>舗装厚ta</td><td>-7</td><td></td></tr><tr><td>埋設深D</td><td>-30</td><td>30</td></tr>`;
+    html+=`<tr><td>Hs※1</td><td>-30</td><td>30</td></tr><tr><td>Dm※2</td><td>-30</td><td>30</td></tr></table>`;
+    html+=`<div class="note">※1 埋設シート位置 管上0.3m</div><div class="note">※2 マーカー位置 DP=0.70m</div></div></div>`;
+
+    html+=`<div class="chk">検測区分（いずれかに○）・段階確認　・出来形管理（段階確認以外）　・その他（　　　）</div>`;
+
+    html+=`<table class="dt"><tr><th>測点</th><th>設計</th><th>検測</th><th>誤差</th><th>日付</th><th>判定</th>`;
+    html+=`<th class="sep">測点</th><th>設計</th><th>検測</th><th>誤差</th><th>日付</th><th>判定</th></tr>`;
+    html+=`<tr><td class="no">${ptL.name}</td><td colspan="5"></td>`;
+    html+=ptR?`<td class="no sep">${ptR.name}</td><td colspan="5"></td>`:`<td class="sep" colspan="6"></td>`;
+    html+=`</tr>`;
+    allItems.forEach(it=>{
+      const dv=designVals[it];if(dv===null)return;
+      const mL=getMeasured(ptL,it);const eL=mL!==null?mL-dv:null;const jL=mL!==null?judgeItem(it,mL):"";
+      html+=`<tr><td class="itm">${it}</td><td>${dv}</td><td>${mL!==null?mL:""}</td><td>${eL!==null?(eL>0?"+":"")+eL:""}</td><td>${ptL.date||""}</td><td class="${jL==="○"?"ok":jL==="×"?"ng":""}">${jL}</td>`;
+      if(ptR){const mR=getMeasured(ptR,it);const eR=mR!==null?mR-dv:null;const jR=mR!==null?judgeItem(it,mR):"";
+        html+=`<td class="itm sep">${it}</td><td>${dv}</td><td>${mR!==null?mR:""}</td><td>${eR!==null?(eR>0?"+":"")+eR:""}</td><td>${ptR.date||""}</td><td class="${jR==="○"?"ok":jR==="×"?"ng":""}">${jR}</td>`;
+      }else html+=`<td class="sep" colspan="6"></td>`;
+      html+=`</tr>`;
+    });
+    html+=`</table><div class="ftr"><span>有限会社信濃住宅設備</span><span>${p+1} / ${coverPages}</span></div></div>`;
   }
 
-  const sheetH=90;const perPage=3;
+  const perPage=3;
   steps.forEach(step=>{
     for(let p=0;p<points.length;p+=perPage){
-      doc.addPage();
-      doc.setFontSize(7);doc.setTextColor(0);
-      doc.text(`${step.id}. ${step.name}`,M,M+4);
-      doc.setFontSize(4);doc.setTextColor(100);
-      doc.text(`${PL[pipeType]} φ${dia} ${road.label}`,W-M,M+4,{align:"right"});
+      html+=`<div class="step-page"><div class="step-hdr"><span>${step.id}. ${step.name}</span><span style="font-size:7px;color:#888">${PL[pipeType]} φ${dia} ${road.label}</span></div>`;
       for(let i=0;i<perPage&&p+i<points.length;i++){
-        drawStepSheet(doc,step,points[p+i],M,M+7+i*sheetH,W-2*M,sheetH-2,i);
+        const pt=points[p+i];
+        html+=`<div class="step-card"><div class="step-photo">写真（${pt.name} ${step.name}）</div><div class="step-info">`;
+        html+=`<div class="step-title">${pt.name} — ${step.name}　${pt.date||""}</div>`;
+        html+=`<table><tr><th>項目</th><th>設計</th><th>実測</th><th>誤差</th><th>判定</th></tr>`;
+        step.inputs.forEach(f=>{
+          let dVal=null;
+          if(f==="H"){let hh=D;let ap=false;for(const s2 of steps){if(s2.inputs.includes("D")){ap=true;continue;}if(!ap)continue;if(s2.id>step.id)break;if(s2.tKey&&s2.tKey!=="t0"&&design[s2.tKey])hh-=Number(design[s2.tKey]);}dVal=step.id===1?H0:Math.round(hh);}
+          else if(f==="B")dVal=design.B?Number(design.B):null;
+          else if(f==="Ba")dVal=design.Ba?Number(design.Ba):null;
+          else if(f==="D")dVal=D;
+          else if(f==="ta")dVal=Number(design.ta)||40;
+          const key=`${step.id}_${f}`;const mv=pt.measured[key]??"";
+          const err=dVal!==null&&mv!==""?Number(mv)-dVal:null;
+          const j=err!==null?judge(err,f):null;
+          html+=`<tr><td>${f}</td><td>${dVal!==null?dVal:""}</td><td>${mv}</td><td>${err!==null?(err>0?"+":"")+err:""}</td><td class="${j==="○"?"ok":j==="×"?"ng":""}">${j||""}</td></tr>`;
+        });
+        if(step.tKey){
+          const tD=design[step.tKey]?Number(design[step.tKey]):null;
+          html+=`<tr><td>${step.tKey}</td><td>${tD||""}</td><td></td><td></td><td></td></tr>`;
+        }
+        step.extra.forEach(ex=>{
+          const key=`${step.id}_${ex.key}`;const mv=pt.measured[key]??"";
+          const err=mv!==""?Number(mv)-ex.design:null;const j=err!==null?judge(err,ex.key,ex):null;
+          html+=`<tr><td>${ex.key}</td><td>${ex.design}</td><td>${mv}</td><td>${err!==null?(err>0?"+":"")+err:""}</td><td class="${j==="○"?"ok":j==="×"?"ng":""}">${j||""}</td></tr>`;
+        });
+        html+=`</table></div></div>`;
       }
-      doc.setFontSize(4);doc.setTextColor(150);
-      doc.text("有限会社信濃住宅設備",M,H-M+2);
+      html+=`<div class="ftr"><span>有限会社信濃住宅設備</span></div></div>`;
     }
   });
 
-  doc.save(`出来形_${header.projectName||"data"}_${today()}.pdf`);
+  html+=`</body></html>`;
+  const w=window.open("","_blank");
+  w.document.write(html);w.document.close();
+  setTimeout(()=>{w.print();},500);
 }
 
 // ═══════════════════════════════════════
