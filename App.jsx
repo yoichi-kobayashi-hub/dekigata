@@ -148,29 +148,29 @@ td,th{border:0.5px solid #333;padding:4px 6px;font-size:13px;vertical-align:midd
       const lh=mzH*(l.t/totalT);
       mzSvg+=`<rect x="${mzX}" y="${yy}" width="${mzW}" height="${lh}" fill="none" stroke="#bbb" stroke-width="0.3"/>`;
       if(l.k==="pipe"){pipeY=yy;pipeLh=lh;}
-      else if(lh>6){mzSvg+=`<text x="${mzX+mzW/2}" y="${yy+lh/2+2}" text-anchor="middle" fill="#333" font-size="6" font-family="sans-serif">${l.n}</text>`;mzSvg+=`<text x="${mzX+3}" y="${yy+lh/2+2}" fill="#888" font-size="6" font-family="sans-serif">${l.k}</text>`;}
+      else if(lh>6){mzSvg+=`<text x="${mzX+mzW/2}" y="${yy+lh/2+3}" text-anchor="middle" fill="#333" font-size="11" font-family="sans-serif">${l.n}</text>`;mzSvg+=`<text x="${mzX+5}" y="${yy+lh/2+3}" fill="#888" font-size="10" font-weight="bold" font-family="sans-serif">${l.k}</text>`;}
       if(l.k==="t3")bt23=yy+lh;
       yy+=lh;
     });
     const pr=pipeLh/2,pcx=mzX+mzW/2,pcy=pipeY+pipeLh/2;
     mzSvg+=`<circle cx="${pcx}" cy="${pcy}" r="${pr}" fill="none" stroke="#333" stroke-width="0.8"/>`;
-    mzSvg+=`<text x="${pcx}" y="${pcy+2}" text-anchor="middle" fill="#555" font-size="6" font-family="sans-serif">φ${dia}</text>`;
+    mzSvg+=`<text x="${pcx}" y="${pcy+3}" text-anchor="middle" fill="#555" font-size="11" font-weight="bold" font-family="sans-serif">φ${dia}</text>`;
     mzSvg+=`<line x1="${pcx-pr}" y1="${bt23}" x2="${pcx+pr}" y2="${bt23}" stroke="#1565C0" stroke-width="1.2"/>`;
     let zp=`M ${pcx-pr} ${bt23+1}`;
     for(let zi=0;zi<Math.floor(pr*2/3);zi++){const zx=(pcx-pr)+zi*3;zp+=` L ${zx+1.5} ${bt23+3} L ${zx+3} ${bt23+1}`;}
     mzSvg+=`<path d="${zp}" fill="none" stroke="#1565C0" stroke-width="0.4"/>`;
     mzSvg+=`<line x1="${pcx}" y1="${bt23-9}" x2="${pcx}" y2="${bt23+7}" stroke="#1565C0" stroke-width="1.2"/>`;
     mzSvg+=`<line x1="${pcx-4}" y1="${bt23-9}" x2="${pcx+4}" y2="${bt23-9}" stroke="#1565C0" stroke-width="1.5"/>`;
-    mzSvg+=`<text x="${pcx}" y="${mzY-4}" text-anchor="middle" fill="#333" font-size="7" font-family="sans-serif">Ba</text>`;
-    mzSvg+=`<text x="${pcx}" y="${mzY+mzH+9}" text-anchor="middle" fill="#333" font-size="7" font-family="sans-serif">B</text>`;
-    const rx1=mzX+mzW+4,rx2=rx1+14,rx3=rx2+14,hsY=mzY+mzH*(700/totalT);
-    const dm=(x,y1,y2,lb,c)=>{mzSvg+=`<line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" stroke="${c}" stroke-width="0.4"/>`;mzSvg+=`<line x1="${x-2}" y1="${y1}" x2="${x+2}" y2="${y1}" stroke="${c}" stroke-width="0.4"/>`;mzSvg+=`<line x1="${x-2}" y1="${y2}" x2="${x+2}" y2="${y2}" stroke="${c}" stroke-width="0.4"/>`;mzSvg+=`<text x="${x+1}" y="${(y1+y2)/2+2}" text-anchor="middle" fill="${c}" font-size="6" font-weight="bold" font-family="sans-serif">${lb}</text>`;};
+    mzSvg+=`<text x="${pcx}" y="${mzY-6}" text-anchor="middle" fill="#333" font-size="14" font-weight="bold" font-family="sans-serif">Ba</text>`;
+    mzSvg+=`<text x="${pcx}" y="${mzY+mzH+14}" text-anchor="middle" fill="#333" font-size="14" font-weight="bold" font-family="sans-serif">B</text>`;
+    const rx1=mzX+mzW+6,rx2=rx1+18,rx3=rx2+18,hsY=mzY+mzH*(700/totalT);
+    const dm=(x,y1,y2,lb,c)=>{mzSvg+=`<line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" stroke="${c}" stroke-width="0.5"/>`;mzSvg+=`<line x1="${x-3}" y1="${y1}" x2="${x+3}" y2="${y1}" stroke="${c}" stroke-width="0.5"/>`;mzSvg+=`<line x1="${x-3}" y1="${y2}" x2="${x+3}" y2="${y2}" stroke="${c}" stroke-width="0.5"/>`;mzSvg+=`<text x="${x+2}" y="${(y1+y2)/2+4}" text-anchor="middle" fill="${c}" font-size="12" font-weight="bold" font-family="sans-serif">${lb}</text>`;};
     dm(rx1,pipeY,hsY,"Hs","#E65100");
     dm(rx2,mzY,hsY,"Dm","#1565C0");
     dm(rx3,mzY,pipeY,"D","#333");
-    dm(rx3+14,mzY,mzY+mzH,"H","#000");
-    const lx=mzX-8;
-    const dmL=(y1,y2,lb)=>{mzSvg+=`<line x1="${lx}" y1="${y1}" x2="${lx}" y2="${y2}" stroke="#555" stroke-width="0.3"/>`;mzSvg+=`<line x1="${lx-2}" y1="${y1}" x2="${lx+2}" y2="${y1}" stroke="#555" stroke-width="0.3"/>`;mzSvg+=`<line x1="${lx-2}" y1="${y2}" x2="${lx+2}" y2="${y2}" stroke="#555" stroke-width="0.3"/>`;mzSvg+=`<text x="${lx-2}" y="${(y1+y2)/2+2}" text-anchor="end" fill="#555" font-size="6" font-family="sans-serif">${lb}</text>`;};
+    dm(rx3+18,mzY,mzY+mzH,"H","#000");
+    const lx=mzX-10;
+    const dmL=(y1,y2,lb)=>{mzSvg+=`<line x1="${lx}" y1="${y1}" x2="${lx}" y2="${y2}" stroke="#555" stroke-width="0.4"/>`;mzSvg+=`<line x1="${lx-3}" y1="${y1}" x2="${lx+3}" y2="${y1}" stroke="#555" stroke-width="0.4"/>`;mzSvg+=`<line x1="${lx-3}" y1="${y2}" x2="${lx+3}" y2="${y2}" stroke="#555" stroke-width="0.4"/>`;mzSvg+=`<text x="${lx-3}" y="${(y1+y2)/2+4}" text-anchor="end" fill="#555" font-size="11" font-weight="bold" font-family="sans-serif">${lb}</text>`;};
     const taH=mzH*(40/totalT);
     dmL(mzY,mzY+taH,"40");
     const gH=mzH*(300/totalT);
@@ -238,8 +238,8 @@ td,th{border:0.5px solid #333;padding:4px 6px;font-size:13px;vertical-align:midd
       if(l.k==="pipe"){pipeY=y;pipeLh=lh;}
       else if(lh>4){
         const tc=isHi?"#fff":"#666";
-        s+=`<text x="${mx+mw/2}" y="${y+lh/2+2}" text-anchor="middle" fill="${tc}" font-size="5" font-family="sans-serif">${l.n}</text>`;
-        s+=`<text x="${mx+2}" y="${y+lh/2+2}" fill="${isHi?'#fff':'#999'}" font-size="5" font-family="sans-serif">${l.k}</text>`;
+        s+=`<text x="${mx+mw/2}" y="${y+lh/2+2}" text-anchor="middle" fill="${tc}" font-size="9" font-family="sans-serif">${l.n}</text>`;
+        s+=`<text x="${mx+2}" y="${y+lh/2+2}" fill="${isHi?'#fff':'#999'}" font-size="9" font-family="sans-serif">${l.k}</text>`;
       }
       if(l.k==="t3")bt23=y+lh;
       y+=lh;
@@ -247,7 +247,7 @@ td,th{border:0.5px solid #333;padding:4px 6px;font-size:13px;vertical-align:midd
     const pr=pipeLh/2,pcx=mx+mw/2,pcy=pipeY+pipeLh/2;
     const isHiP=hiKeys["pipe"];
     s+=`<circle cx="${pcx}" cy="${pcy}" r="${pr}" fill="${isHiP?'#1565C0':filled["pipe"]?'#E3F2FD':'none'}" stroke="#333" stroke-width="0.6"/>`;
-    s+=`<text x="${pcx}" y="${pcy+2}" text-anchor="middle" fill="${isHiP?'#fff':'#555'}" font-size="5" font-family="sans-serif">φ${dia}</text>`;
+    s+=`<text x="${pcx}" y="${pcy+2}" text-anchor="middle" fill="${isHiP?'#fff':'#555'}" font-size="9" font-family="sans-serif">φ${dia}</text>`;
     const blue="#1565C0";
     s+=`<line x1="${pcx-pr}" y1="${bt23}" x2="${pcx+pr}" y2="${bt23}" stroke="${blue}" stroke-width="1"/>`;
     let zp=`M ${pcx-pr} ${bt23+0.8}`;
@@ -263,7 +263,7 @@ td,th{border:0.5px solid #333;padding:4px 6px;font-size:13px;vertical-align:midd
       s+=`<line x1="${hx}" y1="${my}" x2="${hx}" y2="${hBot}" stroke="#333" stroke-width="0.6"/>`;
       s+=`<path d="M${hx-2} ${my+3}L${hx} ${my}L${hx+2} ${my+3}" fill="none" stroke="#333" stroke-width="0.6"/>`;
       s+=`<path d="M${hx-2} ${hBot-3}L${hx} ${hBot}L${hx+2} ${hBot-3}" fill="none" stroke="#333" stroke-width="0.6"/>`;
-      s+=`<text x="${hx-2}" y="${(my+hBot)/2+2}" text-anchor="end" fill="#333" font-size="7" font-weight="bold" font-family="sans-serif">H</text>`;
+      s+=`<text x="${hx-2}" y="${(my+hBot)/2+2}" text-anchor="end" fill="#333" font-size="13" font-weight="bold" font-family="sans-serif">H</text>`;
     }
     // t寸法（左外、現工程の層）
     if(step.tKey&&step.tKey!=="ta"){
@@ -273,7 +273,7 @@ td,th{border:0.5px solid #333;padding:4px 6px;font-size:13px;vertical-align:midd
         s+=`<line x1="${tx}" y1="${tl.top}" x2="${tx}" y2="${tl.bot}" stroke="#C62828" stroke-width="0.6"/>`;
         s+=`<path d="M${tx-2} ${tl.top+3}L${tx} ${tl.top}L${tx+2} ${tl.top+3}" fill="none" stroke="#C62828" stroke-width="0.6"/>`;
         s+=`<path d="M${tx-2} ${tl.bot-3}L${tx} ${tl.bot}L${tx+2} ${tl.bot-3}" fill="none" stroke="#C62828" stroke-width="0.6"/>`;
-        s+=`<text x="${tx-2}" y="${(tl.top+tl.bot)/2+2}" text-anchor="end" fill="#C62828" font-size="6" font-weight="bold" font-family="sans-serif">${step.tKey}</text>`;
+        s+=`<text x="${tx-2}" y="${(tl.top+tl.bot)/2+2}" text-anchor="end" fill="#C62828" font-size="11" font-weight="bold" font-family="sans-serif">${step.tKey}</text>`;
       }
     }
     // ta左右（舗装工程）
@@ -283,7 +283,7 @@ td,th{border:0.5px solid #333;padding:4px 6px;font-size:13px;vertical-align:midd
         const txL=mx+mw*0.25,txR=mx+mw*0.75;
         [[txL,"ta(左)"],[txR,"ta(右)"]].forEach(([tx,lb])=>{
           s+=`<line x1="${tx}" y1="${tl.top}" x2="${tx}" y2="${tl.bot}" stroke="#E65100" stroke-width="0.6"/>`;
-          s+=`<text x="${tx}" y="${tl.top-2}" text-anchor="middle" fill="#E65100" font-size="5" font-weight="bold" font-family="sans-serif">${lb}</text>`;
+          s+=`<text x="${tx}" y="${tl.top-2}" text-anchor="middle" fill="#E65100" font-size="9" font-weight="bold" font-family="sans-serif">${lb}</text>`;
         });
       }
     }
@@ -293,16 +293,16 @@ td,th{border:0.5px solid #333;padding:4px 6px;font-size:13px;vertical-align:midd
       if(ex.key==="Hs"){
         const ex1=mx+mw+3;
         s+=`<line x1="${ex1}" y1="${pipeY}" x2="${ex1}" y2="${hsY}" stroke="#E65100" stroke-width="0.6"/>`;
-        s+=`<text x="${ex1+1}" y="${(pipeY+hsY)/2+2}" fill="#E65100" font-size="6" font-weight="bold" font-family="sans-serif">Hs</text>`;
+        s+=`<text x="${ex1+1}" y="${(pipeY+hsY)/2+2}" fill="#E65100" font-size="11" font-weight="bold" font-family="sans-serif">Hs</text>`;
       }
       if(ex.key==="Dm"){
         const ex2=mx+mw+15;
         s+=`<line x1="${ex2}" y1="${my}" x2="${ex2}" y2="${hsY}" stroke="${blue}" stroke-width="0.6"/>`;
-        s+=`<text x="${ex2+1}" y="${(my+hsY)/2+2}" fill="${blue}" font-size="6" font-weight="bold" font-family="sans-serif">Dm</text>`;
+        s+=`<text x="${ex2+1}" y="${(my+hsY)/2+2}" fill="${blue}" font-size="11" font-weight="bold" font-family="sans-serif">Dm</text>`;
       }
     });
-    s+=`<text x="${pcx}" y="${my-3}" text-anchor="middle" fill="#666" font-size="6" font-family="sans-serif">Ba</text>`;
-    s+=`<text x="${pcx}" y="${my+mh+8}" text-anchor="middle" fill="#666" font-size="6" font-family="sans-serif">B</text>`;
+    s+=`<text x="${pcx}" y="${my-3}" text-anchor="middle" fill="#666" font-size="10" font-family="sans-serif">Ba</text>`;
+    s+=`<text x="${pcx}" y="${my+mh+8}" text-anchor="middle" fill="#666" font-size="10" font-family="sans-serif">B</text>`;
     s+=`</svg>`;
     return s;
   };
