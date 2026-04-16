@@ -121,12 +121,50 @@ table{border-collapse:collapse;width:100%}td,th{border:0.5px solid #333;padding:
     html+=`<tr><td class="lbl">工　　種</td><td colspan="7">配管工</td></tr>`;
     html+=`<tr><td class="lbl">種　　別</td><td colspan="4">${PL[pipeType]} φ${dia}</td><td class="lbl" style="font-size:6px">主任技術者</td><td colspan="2"></td></tr></table>`;
 
-    html+=`<div class="mid"><div class="mid-l"><div style="font-size:7px;color:#666;margin-bottom:2px">検測位置図</div>`;
-    html+=`<div style="font-size:8px">Ba<br>┌────────────┐<br>`;
-    const layerNames=["ta AS(40)","t6 路盤(150)","t5 路盤(150)","t4 発生土(160)","t3 発生土(200)","t2 発生土(200)","t1 保護砂(100)","　　管 φ"+dia+"(OD"+od+")"];
-    if(pipeType==="HPPE")layerNames.push("t0 基礎砂(100)");
-    layerNames.forEach(l=>{html+=`│ ${l}<br>`;});
-    html+=`└────────────┘<br>B</div></div>`;
+    // SVG豆図生成
+    const ls=pipeType==="HPPE"
+      ?[{k:"ta",t:40,n:"AS"},{k:"t6",t:Number(design.t6)||150,n:"路盤(RC40-0)"},{k:"t5",t:Number(design.t5)||150,n:"路盤(RC40-0)"},{k:"t4",t:Number(design.t4)||160,n:"発生土埋戻"},{k:"t3",t:Number(design.t3)||200,n:"発生土埋戻"},{k:"t2",t:Number(design.t2)||200,n:"発生土埋戻"},{k:"t1",t:Number(design.t1)||100,n:"保護砂"},{k:"pipe",t:od,n:""},{k:"t0",t:Number(design.t0)||100,n:"基礎砂"}]
+      :[{k:"ta",t:40,n:"AS"},{k:"t6",t:Number(design.t6)||150,n:"路盤(RC40-0)"},{k:"t5",t:Number(design.t5)||150,n:"路盤(RC40-0)"},{k:"t4",t:Number(design.t4)||160,n:"発生土埋戻"},{k:"t3",t:Number(design.t3)||200,n:"発生土埋戻"},{k:"t2",t:Number(design.t2)||200,n:"発生土埋戻"},{k:"t1",t:Number(design.t1)||100,n:"保護砂"},{k:"pipe",t:od,n:""}];
+    const totalT=ls.reduce((s,l)=>s+l.t,0);
+    const svgW=260,svgH=280,mzW=160,mzH=210,mzX=50,mzY=20;
+    let mzSvg=`<svg viewBox="0 0 ${svgW} ${svgH}" width="100%" style="max-width:200px">`;
+    mzSvg+=`<rect x="${mzX}" y="${mzY}" width="${mzW}" height="${mzH}" fill="none" stroke="#333" stroke-width="0.8"/>`;
+    let yy=mzY,pipeY=0,pipeLh=0,bt23=0;
+    ls.forEach(l=>{
+      const lh=mzH*(l.t/totalT);
+      mzSvg+=`<rect x="${mzX}" y="${yy}" width="${mzW}" height="${lh}" fill="none" stroke="#bbb" stroke-width="0.3"/>`;
+      if(l.k==="pipe"){pipeY=yy;pipeLh=lh;}
+      else if(lh>6){mzSvg+=`<text x="${mzX+mzW/2}" y="${yy+lh/2+2}" text-anchor="middle" fill="#333" font-size="6" font-family="sans-serif">${l.n}</text>`;mzSvg+=`<text x="${mzX+3}" y="${yy+lh/2+2}" fill="#888" font-size="6" font-family="sans-serif">${l.k}</text>`;}
+      if(l.k==="t3")bt23=yy+lh;
+      yy+=lh;
+    });
+    const pr=pipeLh/2,pcx=mzX+mzW/2,pcy=pipeY+pipeLh/2;
+    mzSvg+=`<circle cx="${pcx}" cy="${pcy}" r="${pr}" fill="none" stroke="#333" stroke-width="0.8"/>`;
+    mzSvg+=`<text x="${pcx}" y="${pcy+2}" text-anchor="middle" fill="#555" font-size="6" font-family="sans-serif">φ${dia}</text>`;
+    mzSvg+=`<line x1="${pcx-pr}" y1="${bt23}" x2="${pcx+pr}" y2="${bt23}" stroke="#1565C0" stroke-width="1.2"/>`;
+    let zp=`M ${pcx-pr} ${bt23+1}`;
+    for(let zi=0;zi<Math.floor(pr*2/3);zi++){const zx=(pcx-pr)+zi*3;zp+=` L ${zx+1.5} ${bt23+3} L ${zx+3} ${bt23+1}`;}
+    mzSvg+=`<path d="${zp}" fill="none" stroke="#1565C0" stroke-width="0.4"/>`;
+    mzSvg+=`<line x1="${pcx}" y1="${bt23-9}" x2="${pcx}" y2="${bt23+7}" stroke="#1565C0" stroke-width="1.2"/>`;
+    mzSvg+=`<line x1="${pcx-4}" y1="${bt23-9}" x2="${pcx+4}" y2="${bt23-9}" stroke="#1565C0" stroke-width="1.5"/>`;
+    mzSvg+=`<text x="${pcx}" y="${mzY-4}" text-anchor="middle" fill="#333" font-size="7" font-family="sans-serif">Ba</text>`;
+    mzSvg+=`<text x="${pcx}" y="${mzY+mzH+9}" text-anchor="middle" fill="#333" font-size="7" font-family="sans-serif">B</text>`;
+    const rx1=mzX+mzW+4,rx2=rx1+14,rx3=rx2+14,hsY=mzY+mzH*(700/totalT);
+    const dm=(x,y1,y2,lb,c)=>{mzSvg+=`<line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" stroke="${c}" stroke-width="0.4"/>`;mzSvg+=`<line x1="${x-2}" y1="${y1}" x2="${x+2}" y2="${y1}" stroke="${c}" stroke-width="0.4"/>`;mzSvg+=`<line x1="${x-2}" y1="${y2}" x2="${x+2}" y2="${y2}" stroke="${c}" stroke-width="0.4"/>`;mzSvg+=`<text x="${x+1}" y="${(y1+y2)/2+2}" text-anchor="middle" fill="${c}" font-size="6" font-weight="bold" font-family="sans-serif">${lb}</text>`;};
+    dm(rx1,pipeY,hsY,"Hs","#E65100");
+    dm(rx2,mzY,hsY,"Dm","#1565C0");
+    dm(rx3,mzY,pipeY,"D","#333");
+    dm(rx3+14,mzY,mzY+mzH,"H","#000");
+    const lx=mzX-8;
+    const dmL=(y1,y2,lb)=>{mzSvg+=`<line x1="${lx}" y1="${y1}" x2="${lx}" y2="${y2}" stroke="#555" stroke-width="0.3"/>`;mzSvg+=`<line x1="${lx-2}" y1="${y1}" x2="${lx+2}" y2="${y1}" stroke="#555" stroke-width="0.3"/>`;mzSvg+=`<line x1="${lx-2}" y1="${y2}" x2="${lx+2}" y2="${y2}" stroke="#555" stroke-width="0.3"/>`;mzSvg+=`<text x="${lx-2}" y="${(y1+y2)/2+2}" text-anchor="end" fill="#555" font-size="6" font-family="sans-serif">${lb}</text>`;};
+    const taH=mzH*(40/totalT);
+    dmL(mzY,mzY+taH,"40");
+    const gH=mzH*(300/totalT);
+    dmL(mzY+taH,mzY+taH+gH,"300");
+    const sH=mzH*(660/totalT);
+    dmL(mzY+taH+gH,mzY+taH+gH+sH,"660");
+    mzSvg+=`</svg>`;
+    html+=`<div class="mid"><div class="mid-l"><div style="font-size:7px;color:#666;margin-bottom:2px">検測位置図</div>${mzSvg}</div>`;
 
     html+=`<div class="mid-r"><div style="font-weight:bold;text-align:center;margin-bottom:2px">管理基準</div>`;
     html+=`<table><tr><th>項目</th><th style="width:25px">-mm</th><th style="width:25px">+mm</th></tr>`;
@@ -214,7 +252,7 @@ export default function App(){
   const[cur,setCur]=useState({name:"",date:"",measured:{},photos:{}});
   const[editIdx,setEditIdx]=useState(null);
   const[toast,setToast]=useState("");
-  const[bulkCount,setBulkCount]=useState(10);
+  const[bulkCount,setBulkCount]=useState(1);
   const[inited,setInited]=useState(false);
   const[viewPhoto,setViewPhoto]=useState(null);
   const[camStep,setCamStep]=useState(null);
