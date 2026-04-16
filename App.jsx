@@ -91,7 +91,7 @@ body{font-family:"Hiragino Sans","MS Gothic",sans-serif;font-size:12px;color:#00
 @media print{@page{size:A4 portrait;margin:8mm}body{margin:0}
 svg{width:100% !important;height:100% !important}
 .mid-l svg{min-height:120mm !important}
-.step-mz svg{min-height:70mm !important}}
+.step-photo img{width:100% !important;height:100% !important;object-fit:cover !important}}
 .page{page-break-after:always;width:100%;display:flex;flex-direction:column;min-height:278mm}
 table{border-collapse:collapse;width:100%}
 td,th{border:0.5px solid #333;padding:4px 6px;font-size:13px;vertical-align:middle}
@@ -115,11 +115,13 @@ td,th{border:0.5px solid #333;padding:4px 6px;font-size:13px;vertical-align:midd
 .ng{color:#cc0000;font-weight:bold;font-size:15px}
 .note{font-size:11px;color:#666;padding:3px 0}
 .step-page{page-break-after:always;display:flex;flex-direction:column;min-height:278mm}
-.step-hdr{font-size:16px;font-weight:bold;margin-bottom:6mm;display:flex;justify-content:space-between;padding-bottom:3mm;border-bottom:1px solid #333}
-.step-card{border:0.5px solid #333;margin-bottom:4mm;padding:5mm;display:grid;grid-template-columns:1.1fr 0.9fr 1fr;gap:5mm;flex:1;min-height:82mm}
-.step-photo{aspect-ratio:4/3;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;font-size:14px;color:#999;background:#fafafa}
-.step-mz{border:0.5px solid #ddd;padding:4px;display:flex;align-items:stretch;justify-content:stretch;background:#fafafa;min-height:75mm}
-.step-mz svg{width:100%;height:100%;display:block;flex:1;min-height:70mm}
+.step-hdr{font-size:16px;font-weight:bold;margin-bottom:4mm;display:flex;justify-content:space-between;padding-bottom:3mm;border-bottom:1px solid #333}
+.step-card{border:0.5px solid #333;margin-bottom:3mm;padding:3mm;display:grid;grid-template-columns:2fr 1fr;grid-template-rows:1fr auto;gap:3mm;flex:1;min-height:85mm}
+.step-photo{grid-row:1/3}
+.step-photo{border:1px solid #ccc;display:flex;align-items:center;justify-content:center;font-size:14px;color:#999;background:#fafafa;overflow:hidden;position:relative}
+.step-photo img{width:100%;height:100%;object-fit:cover;display:block}
+.step-mz{border:0.5px solid #ddd;padding:4px;display:flex;align-items:stretch;justify-content:stretch;background:#fafafa}
+.step-mz svg{width:100%;height:100%;display:block;flex:1}
 .step-info{font-size:12px;display:flex;flex-direction:column}
 .step-info table td{font-size:13px;padding:4px 6px}
 .step-info table th{font-size:12px;padding:4px 6px}
@@ -313,12 +315,16 @@ td,th{border:0.5px solid #333;padding:4px 6px;font-size:13px;vertical-align:midd
   const perPage=3;
   points.forEach(pt=>{
     for(let sIdx=0;sIdx<steps.length;sIdx+=perPage){
-      html+=`<div class="step-page"><div class="step-hdr"><span>${pt.name} — 工程写真</span><span style="font-size:7px;color:#888">${PL[pipeType]} φ${dia} ${road.label}　${pt.date||""}</span></div>`;
+      html+=`<div class="step-page"><div class="step-hdr"><span>${pt.name} — 工程写真</span><span style="font-size:10px;color:#888">${PL[pipeType]} φ${dia} ${road.label}　${pt.date||""}</span></div>`;
       for(let i=0;i<perPage&&sIdx+i<steps.length;i++){
         const step=steps[sIdx+i];
-        html+=`<div class="step-card"><div class="step-photo">写真（${pt.name} ${step.name}）</div><div class="step-mz">${mkStepMz(step,pt)}</div><div class="step-info">`;
-        html+=`<div class="step-title">${step.id}. ${step.name}　${pt.date||""}</div>`;
-        html+=`<table><tr><th>項目</th><th>設計</th><th>実測</th><th>誤差</th><th>判定</th></tr>`;
+        const stepPhotos=(pt.photos&&pt.photos[step.id])||[];
+        const photoContent=stepPhotos.length>0
+          ?`<img src="${stepPhotos[0].data}" alt="${pt.name} ${step.name}"/>`
+          :`<span>写真未撮影（${pt.name} ${step.name}）</span>`;
+        html+=`<div class="step-card"><div class="step-photo">${photoContent}</div><div class="step-mz">${mkStepMz(step,pt)}</div><div class="step-info">`;
+        html+=`<div class="step-title">${step.id}. ${step.name}</div>`;
+        html+=`<table><tr><th>項目</th><th>設計</th><th>実測</th><th>判定</th></tr>`;
         step.inputs.forEach(f=>{
           let dVal=null;
           if(f==="H"){let hh=D;let ap=false;for(const s2 of steps){if(s2.inputs.includes("D")){ap=true;continue;}if(!ap)continue;if(s2.id>step.id)break;if(s2.tKey&&s2.tKey!=="t0"&&design[s2.tKey])hh-=Number(design[s2.tKey]);}dVal=step.id===1?H0:Math.round(hh);}
@@ -329,16 +335,16 @@ td,th{border:0.5px solid #333;padding:4px 6px;font-size:13px;vertical-align:midd
           const key=`${step.id}_${f}`;const mv=pt.measured[key]??"";
           const err=dVal!==null&&mv!==""?Number(mv)-dVal:null;
           const j=err!==null?judge(err,f):null;
-          html+=`<tr><td>${f}</td><td>${dVal!==null?dVal:""}</td><td>${mv}</td><td>${err!==null?(err>0?"+":"")+err:""}</td><td class="${j==="○"?"ok":j==="×"?"ng":""}">${j||""}</td></tr>`;
+          html+=`<tr><td>${f}</td><td>${dVal!==null?dVal:""}</td><td>${mv}</td><td class="${j==="○"?"ok":j==="×"?"ng":""}">${j||""}</td></tr>`;
         });
         if(step.tKey){
           const tD=design[step.tKey]?Number(design[step.tKey]):null;
-          html+=`<tr><td>${step.tKey}</td><td>${tD||""}</td><td></td><td></td><td></td></tr>`;
+          html+=`<tr><td>${step.tKey}</td><td>${tD||""}</td><td></td><td></td></tr>`;
         }
         step.extra.forEach(ex=>{
           const key=`${step.id}_${ex.key}`;const mv=pt.measured[key]??"";
           const err=mv!==""?Number(mv)-ex.design:null;const j=err!==null?judge(err,ex.key,ex):null;
-          html+=`<tr><td>${ex.key}</td><td>${ex.design}</td><td>${mv}</td><td>${err!==null?(err>0?"+":"")+err:""}</td><td class="${j==="○"?"ok":j==="×"?"ng":""}">${j||""}</td></tr>`;
+          html+=`<tr><td>${ex.key}</td><td>${ex.design}</td><td>${mv}</td><td class="${j==="○"?"ok":j==="×"?"ng":""}">${j||""}</td></tr>`;
         });
         html+=`</table></div></div>`;
       }
@@ -404,7 +410,60 @@ export default function App(){
   const savePoint=()=>{if(editIdx!==null)setPoints(p=>{const n=[...p];n[editIdx]={...cur};return n;});setScreen("list");};
 
   const takePhoto=(stepId)=>{setPhotoStep(stepId);if(fileRef.current){fileRef.current.value="";fileRef.current.click();}};
-  const onPhotoTaken=(e)=>{const file=e.target.files?.[0];if(!file||photoStep===null)return;const reader=new FileReader();reader.onload=(ev)=>{setCur(p=>{const ph={...p.photos};const a=ph[photoStep]||[];ph[photoStep]=[...a,{data:ev.target.result,time:nowTime()}];return{...p,photos:ph};});};reader.readAsDataURL(file);};
+  const onPhotoTaken=(e)=>{
+    const file=e.target.files?.[0];if(!file||photoStep===null)return;
+    const reader=new FileReader();
+    reader.onload=(ev)=>{
+      const img=new Image();
+      img.onload=()=>{
+        const step=steps.find(s=>s.id===photoStep);
+        const canvas=document.createElement("canvas");
+        canvas.width=img.width;canvas.height=img.height;
+        const ctx=canvas.getContext("2d");
+        ctx.drawImage(img,0,0);
+        // 黒板（写真の約1/6、左下に配置）
+        const bbW=Math.round(img.width*0.32);
+        const bbH=Math.round(img.height*0.30);
+        const bbX=Math.round(img.width*0.02);
+        const bbY=img.height-bbH-Math.round(img.height*0.02);
+        // 深緑背景 + 白枠
+        ctx.fillStyle="#0a4d2e";ctx.fillRect(bbX,bbY,bbW,bbH);
+        ctx.strokeStyle="#f5f5dc";ctx.lineWidth=Math.max(3,bbW*0.008);
+        ctx.strokeRect(bbX+4,bbY+4,bbW-8,bbH-8);
+        // チョーク風白文字
+        ctx.fillStyle="#f5f5dc";
+        const pad=Math.round(bbW*0.04);
+        const baseFs=Math.round(bbH*0.10);
+        const lineH=Math.round(bbH*0.115);
+        ctx.font=`bold ${Math.round(baseFs*0.85)}px "Hiragino Sans","MS Gothic",sans-serif`;
+        let ty=bbY+pad+baseFs;
+        const lines=[];
+        if(header.projectName)lines.push(["工事名",header.projectName.length>12?header.projectName.slice(0,12)+"…":header.projectName]);
+        lines.push(["測点",cur.name||""]);
+        lines.push(["工程",`${step.id}.${step.name}`]);
+        lines.push(["管種",`${PL[pipeType]} φ${dia}`]);
+        const hVal=(()=>{if(step.id===1)return H0;const bs=steps.find(s=>s.tKey==="t0");if(bs&&step.id===bs.id)return H0-(Number(design.t0)||0);let h=D;let a=false;for(const x of steps){if(x.inputs.includes("D")){a=true;continue;}if(!a)continue;if(x.id>step.id)break;if(x.tKey&&x.tKey!=="t0"&&design[x.tKey])h-=Number(design[x.tKey]);}return h;})();
+        if(step.inputs.includes("H"))lines.push(["設計H",`${hVal}mm`]);
+        if(step.inputs.includes("D"))lines.push(["設計D",`${D}mm`]);
+        if(step.inputs.includes("Ba"))lines.push(["設計Ba",`${design.Ba||""}mm`]);
+        if(step.tKey&&design[step.tKey])lines.push([step.tKey,`${design[step.tKey]}mm`]);
+        lines.push(["日付",cur.date||today()]);
+        lines.push(["会社","(有)信濃住宅設備"]);
+        lines.forEach(([k,v])=>{
+          if(ty>bbY+bbH-pad)return;
+          ctx.font=`bold ${Math.round(baseFs*0.7)}px "Hiragino Sans","MS Gothic",sans-serif`;
+          ctx.fillText(k,bbX+pad,ty);
+          ctx.font=`bold ${Math.round(baseFs*0.85)}px "Hiragino Sans","MS Gothic",sans-serif`;
+          ctx.fillText(String(v),bbX+pad+Math.round(bbW*0.22),ty);
+          ty+=lineH;
+        });
+        const composited=canvas.toDataURL("image/jpeg",0.85);
+        setCur(p=>{const ph={...p.photos};const a=ph[photoStep]||[];ph[photoStep]=[...a,{data:composited,time:nowTime()}];return{...p,photos:ph};});
+      };
+      img.src=ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
   const delPhoto=(sid,idx)=>{setCur(p=>{const ph={...p.photos};const a=[...(ph[sid]||[])];a.splice(idx,1);ph[sid]=a;return{...p,photos:ph};});};
   const totalPhotos=(pt)=>{if(!pt.photos)return 0;return Object.values(pt.photos).reduce((s,a)=>s+a.length,0);};
 
