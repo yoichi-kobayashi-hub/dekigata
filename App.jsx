@@ -96,16 +96,16 @@ td,th{border:0.5px solid #333;padding:4px 6px;font-size:13px;vertical-align:midd
 .title{font-size:22px;font-weight:bold;text-align:center;letter-spacing:8px;padding:8px 0 10px}
 .seal{text-align:center;font-size:10px;color:#666;width:52px}
 .seal-box{height:36px}
-.mid{display:grid;grid-template-columns:55% 45%;border:0.5px solid #333}
-.mid-l{border-right:0.5px solid #333;padding:8px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center}
-.mid-l svg{max-width:100%;height:auto}
+.mid{display:grid;grid-template-columns:60% 40%;border:0.5px solid #333;min-height:110mm}
+.mid-l{border-right:0.5px solid #333;padding:4px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.mid-l svg{width:100%;height:100%;max-height:105mm}
 .mid-r{padding:8px;font-size:12px}
-.mid-r table td{font-size:12px;padding:3px 6px}
-.chk{border:0.5px solid #333;padding:6px 8px;font-size:12px;color:#333;margin-top:-0.5px}
+.mid-r table td{font-size:13px;padding:5px 8px}
+.chk{border:0.5px solid #333;padding:8px 10px;font-size:13px;color:#333;margin-top:-0.5px}
 .dt{flex:1}
-.dt td,.dt th{font-size:13px;text-align:center;padding:5px 4px}
-.dt th{background:#f5f5f0;font-size:12px}
-.dt .no{font-weight:bold;background:#fafaf5;font-size:14px}
+.dt td,.dt th{font-size:13px;text-align:center;padding:8px 4px;height:24px}
+.dt th{background:#f5f5f0;font-size:12px;padding:6px 4px;height:18px}
+.dt .no{font-weight:bold;background:#fafaf5;font-size:14px;height:22px}
 .dt .itm{text-align:left;padding-left:8px;color:#333;font-weight:bold;font-size:13px}
 .dt .sep{border-left:1.5px solid #000}
 .ok{color:#006633;font-weight:bold;font-size:15px}
