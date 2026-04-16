@@ -88,7 +88,10 @@ function generatePDF({header,pipeType,roadType,surfaceType,design,points,steps,d
 
   const css=`*{margin:0;padding:0;box-sizing:border-box}
 body{font-family:"Hiragino Sans","MS Gothic",sans-serif;font-size:12px;color:#000;line-height:1.3}
-@media print{@page{size:A4 portrait;margin:8mm}body{margin:0}}
+@media print{@page{size:A4 portrait;margin:8mm}body{margin:0}
+svg{width:100% !important;height:100% !important}
+.mid-l svg{min-height:120mm !important}
+.step-mz svg{min-height:70mm !important}}
 .page{page-break-after:always;width:100%;display:flex;flex-direction:column;min-height:278mm}
 table{border-collapse:collapse;width:100%}
 td,th{border:0.5px solid #333;padding:4px 6px;font-size:13px;vertical-align:middle}
@@ -96,9 +99,9 @@ td,th{border:0.5px solid #333;padding:4px 6px;font-size:13px;vertical-align:midd
 .title{font-size:22px;font-weight:bold;text-align:center;letter-spacing:8px;padding:8px 0 10px}
 .seal{text-align:center;font-size:10px;color:#666;width:52px}
 .seal-box{height:36px}
-.mid{display:grid;grid-template-columns:60% 40%;border:0.5px solid #333;min-height:110mm}
-.mid-l{border-right:0.5px solid #333;padding:4px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center}
-.mid-l svg{width:100%;height:100%;max-height:105mm}
+.mid{display:grid;grid-template-columns:60% 40%;border:0.5px solid #333;min-height:130mm}
+.mid-l{border-right:0.5px solid #333;padding:4mm;text-align:center;display:flex;flex-direction:column;align-items:stretch;justify-content:stretch}
+.mid-l svg{width:100%;height:100%;display:block;flex:1;min-height:120mm}
 .mid-r{padding:8px;font-size:12px}
 .mid-r table td{font-size:13px;padding:5px 8px}
 .chk{border:0.5px solid #333;padding:8px 10px;font-size:13px;color:#333;margin-top:-0.5px}
@@ -115,8 +118,8 @@ td,th{border:0.5px solid #333;padding:4px 6px;font-size:13px;vertical-align:midd
 .step-hdr{font-size:16px;font-weight:bold;margin-bottom:6mm;display:flex;justify-content:space-between;padding-bottom:3mm;border-bottom:1px solid #333}
 .step-card{border:0.5px solid #333;margin-bottom:4mm;padding:5mm;display:grid;grid-template-columns:1.1fr 0.9fr 1fr;gap:5mm;flex:1;min-height:82mm}
 .step-photo{aspect-ratio:4/3;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;font-size:14px;color:#999;background:#fafafa}
-.step-mz{border:0.5px solid #ddd;padding:4px;display:flex;align-items:center;justify-content:center;background:#fafafa}
-.step-mz svg{max-width:100%;height:auto}
+.step-mz{border:0.5px solid #ddd;padding:4px;display:flex;align-items:stretch;justify-content:stretch;background:#fafafa;min-height:75mm}
+.step-mz svg{width:100%;height:100%;display:block;flex:1;min-height:70mm}
 .step-info{font-size:12px;display:flex;flex-direction:column}
 .step-info table td{font-size:13px;padding:4px 6px}
 .step-info table th{font-size:12px;padding:4px 6px}
@@ -141,7 +144,7 @@ td,th{border:0.5px solid #333;padding:4px 6px;font-size:13px;vertical-align:midd
       :[{k:"ta",t:40,n:"AS"},{k:"t6",t:Number(design.t6)||150,n:"路盤(RC40-0)"},{k:"t5",t:Number(design.t5)||150,n:"路盤(RC40-0)"},{k:"t4",t:Number(design.t4)||160,n:"発生土埋戻"},{k:"t3",t:Number(design.t3)||200,n:"発生土埋戻"},{k:"t2",t:Number(design.t2)||200,n:"発生土埋戻"},{k:"t1",t:Number(design.t1)||100,n:"保護砂"},{k:"pipe",t:od,n:""}];
     const totalT=ls.reduce((s,l)=>s+l.t,0);
     const svgW=260,svgH=280,mzW=160,mzH=210,mzX=50,mzY=20;
-    let mzSvg=`<svg viewBox="0 0 ${svgW} ${svgH}" width="100%" style="max-width:200px">`;
+    let mzSvg=`<svg viewBox="0 0 ${svgW} ${svgH}" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">`;
     mzSvg+=`<rect x="${mzX}" y="${mzY}" width="${mzW}" height="${mzH}" fill="none" stroke="#333" stroke-width="0.8"/>`;
     let yy=mzY,pipeY=0,pipeLh=0,bt23=0;
     ls.forEach(l=>{
@@ -224,7 +227,7 @@ td,th{border:0.5px solid #333;padding:4px 6px;font-size:13px;vertical-align:midd
     if(step.inputs.includes("D"))hiKeys["pipe"]=true;
     if(step.id===1)hiKeys["_excav"]=true;
     const W=200,H=180,mx=24,my=12,mw=120,mh=150;
-    let s=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">`;
+    let s=`<svg viewBox="0 0 ${W} ${H}" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style="display:block">`;
     if(hiKeys["_excav"])s+=`<rect x="${mx-1}" y="${my-1}" width="${mw+2}" height="${mh+2}" fill="rgba(29,158,117,0.08)" stroke="#1D9E75" stroke-width="1" stroke-dasharray="3 2"/>`;
     s+=`<rect x="${mx}" y="${my}" width="${mw}" height="${mh}" fill="none" stroke="#333" stroke-width="0.6"/>`;
     let y=my,pipeY=0,pipeLh=0,bt23=0;
