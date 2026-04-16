@@ -381,6 +381,97 @@ export default function App(){
   const[camStep,setCamStep]=useState(null);
   const fileRef=useRef(null);
   const[photoStep,setPhotoStep]=useState(null);
+  const[projects,setProjects]=useState([]);
+  const[currentProjId,setCurrentProjId]=useState(null);
+  const[loaded,setLoaded]=useState(false);
+  const[showProjList,setShowProjList]=useState(false);
+
+  // 起動時: localStorage から全プロジェクト読み込み
+  useEffect(()=>{
+    try{
+      const raw=localStorage.getItem("dekigata_projects");
+      if(raw){const pj=JSON.parse(raw);setProjects(pj);}
+      const cid=localStorage.getItem("dekigata_currentId");
+      if(cid)setCurrentProjId(cid);
+    }catch(e){console.warn("load err",e);}
+    setLoaded(true);
+  },[]);
+
+  // 現在のプロジェクトが変わったら復元
+  useEffect(()=>{
+    if(!loaded||!currentProjId)return;
+    const pj=projects.find(p=>p.id===currentProjId);
+    if(pj){
+      setPipeType(pj.pipeType||"DCIP");
+      setRoadType(pj.roadType||"shidou");
+      setSurfaceType(pj.surfaceType||"asphalt");
+      setHeader(pj.header||{projectName:"",location:"",diameter:150});
+      setDesign(pj.design||{});
+      setPoints(pj.points||[]);
+      setInited(true);
+    }
+  // eslint-disable-next-line
+  },[currentProjId,loaded]);
+
+  // 自動保存: 状態変化のたびに保存
+  useEffect(()=>{
+    if(!loaded||!inited||!currentProjId)return;
+    const save={id:currentProjId,pipeType,roadType,surfaceType,header,design,points,updatedAt:new Date().toISOString()};
+    setProjects(prev=>{
+      const idx=prev.findIndex(p=>p.id===currentProjId);
+      let next;
+      if(idx<0)next=[...prev,save];
+      else{next=[...prev];next[idx]=save;}
+      try{localStorage.setItem("dekigata_projects",JSON.stringify(next));}catch(e){console.warn("save err",e);}
+      return next;
+    });
+  // eslint-disable-next-line
+  },[header,design,points,pipeType,roadType,surfaceType,loaded,inited,currentProjId]);
+
+  // 初期プロジェクト作成 or 既存ロード
+  useEffect(()=>{
+    if(!loaded)return;
+    if(currentProjId&&projects.find(p=>p.id===currentProjId))return;
+    if(projects.length>0){
+      // 最新のプロジェクトを自動選択
+      const latest=[...projects].sort((a,b)=>(b.updatedAt||"").localeCompare(a.updatedAt||""))[0];
+      setCurrentProjId(latest.id);
+      localStorage.setItem("dekigata_currentId",latest.id);
+    }else{
+      // 新規作成
+      const id="p_"+Date.now();
+      setCurrentProjId(id);
+      localStorage.setItem("dekigata_currentId",id);
+    }
+  // eslint-disable-next-line
+  },[loaded]);
+
+  const newProject=()=>{
+    const id="p_"+Date.now();
+    setCurrentProjId(id);localStorage.setItem("dekigata_currentId",id);
+    setPipeType("DCIP");setRoadType("shidou");setSurfaceType("asphalt");
+    setHeader({projectName:"",location:"",diameter:150});
+    setDesign({});setPoints([]);setInited(false);
+    setScreen("setup");setShowProjList(false);
+    setToast("新規プロジェクト作成");setTimeout(()=>setToast(""),2000);
+  };
+  const switchProject=(id)=>{
+    setCurrentProjId(id);localStorage.setItem("dekigata_currentId",id);
+    setShowProjList(false);setScreen("setup");
+    setToast("プロジェクト切替");setTimeout(()=>setToast(""),2000);
+  };
+  const deleteProject=(id)=>{
+    if(!confirm("このプロジェクトを削除しますか?"))return;
+    setProjects(prev=>{
+      const next=prev.filter(p=>p.id!==id);
+      try{localStorage.setItem("dekigata_projects",JSON.stringify(next));}catch(e){}
+      if(id===currentProjId){
+        if(next.length>0){setCurrentProjId(next[0].id);localStorage.setItem("dekigata_currentId",next[0].id);}
+        else{const nid="p_"+Date.now();setCurrentProjId(nid);localStorage.setItem("dekigata_currentId",nid);setHeader({projectName:"",location:"",diameter:150});setDesign({});setPoints([]);setInited(false);}
+      }
+      return next;
+    });
+  };
 
   const road=ROADS.find(r=>r.key===roadType);
   const D=road.D;const dia=header.diameter;const od=getOD(pipeType,dia);
@@ -389,7 +480,7 @@ export default function App(){
   const tSum=steps.reduce((s,st)=>s+(st.tKey&&design[st.tKey]?Number(design[st.tKey]):0),0)+(design.ta?Number(design.ta):0);
 
   const rebuild=(p,r,sf)=>{const st=getSteps(p,r,sf,ROADS.find(x=>x.key===r).D);setDesign(d=>({...getDefaults(st),B:d.B||"",Ba:d.Ba||""}));setPoints([]);};
-  if(!inited){rebuild("DCIP","shidou","asphalt");setInited(true);}
+  if(!inited&&loaded&&currentProjId&&!projects.find(p=>p.id===currentProjId)){rebuild("DCIP","shidou","asphalt");setInited(true);}
 
   const calcDesignH=(sid)=>{
     if(sid===1)return H0;const bStep=steps.find(s=>s.tKey==="t0");
@@ -485,7 +576,7 @@ export default function App(){
 
   // ═══ SETUP ═══
   if(screen==="setup"){const dias=getDias(pipeType);return(<div style={S.w}>
-    <div style={S.top}><h1 style={S.logo}>出来形かんたん</h1><span style={S.bg}>1/3</span></div>
+    <div style={S.top}><h1 style={S.logo}>出来形かんたん</h1><div style={{display:"flex",alignItems:"center",gap:6}}><span style={S.bg}>1/3</span><button style={{...S.bk,fontSize:20,padding:"4px 8px"}} onClick={()=>setShowProjList(true)} title="プロジェクト一覧">≡</button></div></div>
     <div style={S.c}><div style={S.ch}>管種</div><div style={{display:"flex",gap:6}}>
       {["DCIP","HPPE"].map(k=>(<button key={k} onClick={()=>selPipe(k)} style={{...S.sel,flex:1,...(pipeType===k?S.selOn:{})}}><div style={{fontSize:14,fontWeight:700}}>{k}</div><div style={{fontSize:10,opacity:.6}}>{k==="DCIP"?"ダクタイル鋳鉄管":"ポリエチレン管"}</div></button>))}
       <button onClick={()=>selPipe("SHIKIRI")} style={{...S.sel,flex:.7,...(pipeType==="SHIKIRI"?S.selOn:{})}}><div style={{fontSize:12,fontWeight:700}}>仕切弁筐</div></button></div></div>
@@ -499,7 +590,39 @@ export default function App(){
     </>}
     <div style={S.c}><div style={S.ch}>工事情報</div>
       {[["projectName","工事名"],["location","工事箇所"]].map(([k,l])=>(<div key={k} style={{marginBottom:8}}><label style={S.lb}>{l}</label><input style={S.inp} value={header[k]} onChange={e=>setHeader(h=>({...h,[k]:e.target.value}))} placeholder={l}/></div>))}</div>
-    <button style={S.pri} onClick={()=>setScreen("design")}>設計値確認 →</button></div>);}
+    <button style={S.pri} onClick={()=>setScreen("design")}>設計値確認 →</button>
+    {showProjList&&(<div onClick={()=>setShowProjList(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:9999,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:20,paddingTop:60}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:12,padding:20,maxWidth:480,width:"100%",maxHeight:"80vh",overflowY:"auto"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+          <h2 style={{fontSize:18,fontWeight:700,margin:0}}>プロジェクト一覧</h2>
+          <button style={{background:"none",border:"none",fontSize:24,cursor:"pointer",color:"#888",padding:"0 8px"}} onClick={()=>setShowProjList(false)}>×</button>
+        </div>
+        <button style={{...S.pri,marginBottom:16}} onClick={newProject}>+ 新規プロジェクト</button>
+        {projects.length===0?(<div style={{textAlign:"center",padding:"20px 0",color:"#888",fontSize:13}}>プロジェクトなし</div>):(
+          projects.sort((a,b)=>(b.updatedAt||"").localeCompare(a.updatedAt||"")).map(pj=>{
+            const isCurrent=pj.id===currentProjId;
+            const pipeLabel=PL[pj.pipeType||"DCIP"];
+            const nameShow=pj.header?.projectName||"(名称未設定)";
+            const ptsN=pj.points?.length||0;
+            const dt=pj.updatedAt?new Date(pj.updatedAt).toLocaleString("ja-JP",{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}):"";
+            return(<div key={pj.id} style={{border:isCurrent?"2px solid #1565C0":"1px solid #ddd",borderRadius:10,padding:"10px 12px",marginBottom:8,background:isCurrent?"#E3F2FD":"#fff"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:15,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nameShow}{isCurrent&&<span style={{fontSize:10,color:"#1565C0",marginLeft:6}}>（現在）</span>}</div>
+                  <div style={{fontSize:11,color:"#888",marginTop:2}}>{pipeLabel} φ{pj.header?.diameter||"—"} / {ptsN}測点 / {dt}</div>
+                </div>
+                <div style={{display:"flex",gap:4,flexShrink:0}}>
+                  {!isCurrent&&<button style={{...S.sm,fontSize:13,background:"#E3F2FD",padding:"6px 10px",borderRadius:6}} onClick={()=>switchProject(pj.id)}>開く</button>}
+                  <button style={{...S.sm,fontSize:13,color:"#C62828",padding:"6px 10px"}} onClick={()=>deleteProject(pj.id)}>削除</button>
+                </div>
+              </div>
+            </div>);
+          })
+        )}
+      </div>
+    </div>)}
+    {toast&&<div style={S.to}>{toast}</div>}
+    </div>);}
 
   // ═══ DESIGN ═══
   if(screen==="design"){return(<div style={S.w}>
@@ -576,7 +699,8 @@ export default function App(){
   // ═══ LIST ═══
   return(<div style={S.w}>
     <div style={S.top}><button style={S.bk} onClick={()=>setScreen("design")}>← 設計値</button>
-      <h1 style={{fontSize:16,fontWeight:700,margin:0}}>{header.projectName||"出来形管理"}</h1></div>
+      <h1 style={{fontSize:16,fontWeight:700,margin:0,flex:1,textAlign:"center",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{header.projectName||"出来形管理"}</h1>
+      <button style={{...S.bk,fontSize:18,padding:"4px 8px"}} onClick={()=>setShowProjList(true)} title="プロジェクト一覧">≡</button></div>
     <div style={{display:"flex",gap:6,fontSize:11,color:"#888",padding:"0 4px",marginBottom:10,flexWrap:"wrap"}}>
       <span>{PL[pipeType]}</span><span>φ{dia}</span><span>{road.label}</span><span>{steps.length}工程</span></div>
     {points.length===0?(<div style={{textAlign:"center",padding:"40px 16px",color:"#888"}}>
@@ -606,7 +730,38 @@ export default function App(){
         setToast("CSV出力完了");setTimeout(()=>setToast(""),3000);
       }}>CSV出力</button>
     </div></>)}
-    {toast&&<div style={S.to}>{toast}</div>}</div>);
+    {toast&&<div style={S.to}>{toast}</div>}
+    {showProjList&&(<div onClick={()=>setShowProjList(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:9999,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:20,paddingTop:60}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:12,padding:20,maxWidth:480,width:"100%",maxHeight:"80vh",overflowY:"auto"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+          <h2 style={{fontSize:18,fontWeight:700,margin:0}}>プロジェクト一覧</h2>
+          <button style={{background:"none",border:"none",fontSize:24,cursor:"pointer",color:"#888",padding:"0 8px"}} onClick={()=>setShowProjList(false)}>×</button>
+        </div>
+        <button style={{...S.pri,marginBottom:16}} onClick={newProject}>+ 新規プロジェクト</button>
+        {projects.length===0?(<div style={{textAlign:"center",padding:"20px 0",color:"#888",fontSize:13}}>プロジェクトなし</div>):(
+          projects.sort((a,b)=>(b.updatedAt||"").localeCompare(a.updatedAt||"")).map(pj=>{
+            const isCurrent=pj.id===currentProjId;
+            const pipeLabel=PL[pj.pipeType||"DCIP"];
+            const nameShow=pj.header?.projectName||"(名称未設定)";
+            const ptsN=pj.points?.length||0;
+            const dt=pj.updatedAt?new Date(pj.updatedAt).toLocaleString("ja-JP",{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}):"";
+            return(<div key={pj.id} style={{border:isCurrent?"2px solid #1565C0":"1px solid #ddd",borderRadius:10,padding:"10px 12px",marginBottom:8,background:isCurrent?"#E3F2FD":"#fff"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:15,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nameShow}{isCurrent&&<span style={{fontSize:10,color:"#1565C0",marginLeft:6}}>（現在）</span>}</div>
+                  <div style={{fontSize:11,color:"#888",marginTop:2}}>{pipeLabel} φ{pj.header?.diameter||"—"} / {ptsN}測点 / {dt}</div>
+                </div>
+                <div style={{display:"flex",gap:4,flexShrink:0}}>
+                  {!isCurrent&&<button style={{...S.sm,fontSize:13,background:"#E3F2FD",padding:"6px 10px",borderRadius:6}} onClick={()=>switchProject(pj.id)}>開く</button>}
+                  <button style={{...S.sm,fontSize:13,color:"#C62828",padding:"6px 10px"}} onClick={()=>deleteProject(pj.id)}>削除</button>
+                </div>
+              </div>
+            </div>);
+          })
+        )}
+      </div>
+    </div>)}
+    </div>);
 }
 
 const S={
