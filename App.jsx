@@ -156,13 +156,13 @@ table{border-collapse:collapse;width:100%}td,th{border:0.5px solid #333;padding:
   }
 
   const perPage=3;
-  steps.forEach(step=>{
-    for(let p=0;p<points.length;p+=perPage){
-      html+=`<div class="step-page"><div class="step-hdr"><span>${step.id}. ${step.name}</span><span style="font-size:7px;color:#888">${PL[pipeType]} φ${dia} ${road.label}</span></div>`;
-      for(let i=0;i<perPage&&p+i<points.length;i++){
-        const pt=points[p+i];
+  points.forEach(pt=>{
+    for(let sIdx=0;sIdx<steps.length;sIdx+=perPage){
+      html+=`<div class="step-page"><div class="step-hdr"><span>${pt.name} — 工程写真</span><span style="font-size:7px;color:#888">${PL[pipeType]} φ${dia} ${road.label}　${pt.date||""}</span></div>`;
+      for(let i=0;i<perPage&&sIdx+i<steps.length;i++){
+        const step=steps[sIdx+i];
         html+=`<div class="step-card"><div class="step-photo">写真（${pt.name} ${step.name}）</div><div class="step-info">`;
-        html+=`<div class="step-title">${pt.name} — ${step.name}　${pt.date||""}</div>`;
+        html+=`<div class="step-title">${step.id}. ${step.name}　${pt.date||""}</div>`;
         html+=`<table><tr><th>項目</th><th>設計</th><th>実測</th><th>誤差</th><th>判定</th></tr>`;
         step.inputs.forEach(f=>{
           let dVal=null;
