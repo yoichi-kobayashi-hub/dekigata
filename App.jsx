@@ -103,8 +103,9 @@ table{border-collapse:collapse;width:100%}td,th{border:0.5px solid #333;padding:
 .note{font-size:6px;color:#666;padding:1px 0}
 .step-page{page-break-after:always;padding:2mm 0}
 .step-hdr{font-size:10px;font-weight:bold;margin-bottom:3mm;display:flex;justify-content:space-between}
-.step-card{border:0.5px solid #333;margin-bottom:3mm;padding:3mm;display:grid;grid-template-columns:1fr 1fr;gap:3mm}
+.step-card{border:0.5px solid #333;margin-bottom:3mm;padding:3mm;display:grid;grid-template-columns:1.1fr 0.9fr 1fr;gap:3mm}
 .step-photo{aspect-ratio:4/3;border:0.5px solid #ccc;display:flex;align-items:center;justify-content:center;font-size:8px;color:#ccc}
+.step-mz{border:0.5px solid #ddd;padding:2px;display:flex;align-items:center;justify-content:center;background:#fafafa}
 .step-info{font-size:7px}.step-info table td{font-size:7px;padding:1px 2px}
 .step-title{font-weight:bold;font-size:8px;margin-bottom:2mm}
 .ftr{font-size:6px;color:#888;display:flex;justify-content:space-between;margin-top:2mm}`;
@@ -193,13 +194,113 @@ table{border-collapse:collapse;width:100%}td,th{border:0.5px solid #333;padding:
     html+=`</table><div class="ftr"><span>有限会社信濃住宅設備</span><span>${p+1} / ${coverPages}</span></div></div>`;
   }
 
+  // 工程別豆図生成
+  const mkStepMz=(step,pt)=>{
+    const ls=pipeType==="HPPE"
+      ?[{k:"ta",t:40,n:"AS"},{k:"t6",t:Number(design.t6)||150,n:"路盤"},{k:"t5",t:Number(design.t5)||150,n:"路盤"},{k:"t4",t:Number(design.t4)||160,n:"発生土"},{k:"t3",t:Number(design.t3)||200,n:"発生土"},{k:"t2",t:Number(design.t2)||200,n:"発生土"},{k:"t1",t:Number(design.t1)||100,n:"保護砂"},{k:"pipe",t:od,n:""},{k:"t0",t:Number(design.t0)||100,n:"基礎砂"}]
+      :[{k:"ta",t:40,n:"AS"},{k:"t6",t:Number(design.t6)||150,n:"路盤"},{k:"t5",t:Number(design.t5)||150,n:"路盤"},{k:"t4",t:Number(design.t4)||160,n:"発生土"},{k:"t3",t:Number(design.t3)||200,n:"発生土"},{k:"t2",t:Number(design.t2)||200,n:"発生土"},{k:"t1",t:Number(design.t1)||100,n:"保護砂"},{k:"pipe",t:od,n:""}];
+    const tot=ls.reduce((s,l)=>s+l.t,0);
+    const filled={};let ap=false;
+    for(const s2 of steps){
+      if(s2.id>step.id)break;
+      if(s2.tKey)filled[s2.tKey]=true;
+      if(s2.inputs.includes("D"))filled["pipe"]=true;
+    }
+    const hiKeys={};
+    if(step.tKey)hiKeys[step.tKey]=true;
+    if(step.inputs.includes("D"))hiKeys["pipe"]=true;
+    if(step.id===1)hiKeys["_excav"]=true;
+    const W=200,H=180,mx=24,my=12,mw=120,mh=150;
+    let s=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">`;
+    if(hiKeys["_excav"])s+=`<rect x="${mx-1}" y="${my-1}" width="${mw+2}" height="${mh+2}" fill="rgba(29,158,117,0.08)" stroke="#1D9E75" stroke-width="1" stroke-dasharray="3 2"/>`;
+    s+=`<rect x="${mx}" y="${my}" width="${mw}" height="${mh}" fill="none" stroke="#333" stroke-width="0.6"/>`;
+    let y=my,pipeY=0,pipeLh=0,bt23=0;
+    const lyMap={};
+    ls.forEach(l=>{
+      const lh=mh*(l.t/tot);
+      lyMap[l.k]={top:y,bot:y+lh,h:lh};
+      const isHi=hiKeys[l.k];const isFill=filled[l.k];
+      const fill=isHi?"#1565C0":isFill?"#E3F2FD":"none";
+      s+=`<rect x="${mx}" y="${y}" width="${mw}" height="${lh}" fill="${fill}" stroke="#bbb" stroke-width="0.3"/>`;
+      if(l.k==="pipe"){pipeY=y;pipeLh=lh;}
+      else if(lh>4){
+        const tc=isHi?"#fff":"#666";
+        s+=`<text x="${mx+mw/2}" y="${y+lh/2+2}" text-anchor="middle" fill="${tc}" font-size="5" font-family="sans-serif">${l.n}</text>`;
+        s+=`<text x="${mx+2}" y="${y+lh/2+2}" fill="${isHi?'#fff':'#999'}" font-size="5" font-family="sans-serif">${l.k}</text>`;
+      }
+      if(l.k==="t3")bt23=y+lh;
+      y+=lh;
+    });
+    const pr=pipeLh/2,pcx=mx+mw/2,pcy=pipeY+pipeLh/2;
+    const isHiP=hiKeys["pipe"];
+    s+=`<circle cx="${pcx}" cy="${pcy}" r="${pr}" fill="${isHiP?'#1565C0':filled["pipe"]?'#E3F2FD':'none'}" stroke="#333" stroke-width="0.6"/>`;
+    s+=`<text x="${pcx}" y="${pcy+2}" text-anchor="middle" fill="${isHiP?'#fff':'#555'}" font-size="5" font-family="sans-serif">φ${dia}</text>`;
+    const blue="#1565C0";
+    s+=`<line x1="${pcx-pr}" y1="${bt23}" x2="${pcx+pr}" y2="${bt23}" stroke="${blue}" stroke-width="1"/>`;
+    let zp=`M ${pcx-pr} ${bt23+0.8}`;
+    for(let zi=0;zi<Math.floor(pr*2/2.5);zi++){const zx=(pcx-pr)+zi*2.5;zp+=` L ${zx+1.25} ${bt23+2.5} L ${zx+2.5} ${bt23+0.8}`;}
+    s+=`<path d="${zp}" fill="none" stroke="${blue}" stroke-width="0.3"/>`;
+    s+=`<line x1="${pcx}" y1="${bt23-7}" x2="${pcx}" y2="${bt23+5}" stroke="${blue}" stroke-width="1"/>`;
+    s+=`<line x1="${pcx-3}" y1="${bt23-7}" x2="${pcx+3}" y2="${bt23-7}" stroke="${blue}" stroke-width="1.2"/>`;
+    // H寸法（左外、現工程の深さまで）
+    const calcH=(sid)=>{if(sid===1)return tot;const bs=steps.find(s=>s.tKey==="t0");if(bs&&sid===bs.id)return tot-(Number(design.t0)||0);let h=D;let a=false;for(const x of steps){if(x.inputs.includes("D")){a=true;continue;}if(!a)continue;if(x.id>sid)break;if(x.tKey&&x.tKey!=="t0"&&design[x.tKey])h-=Number(design[x.tKey]);}return h;};
+    const hVal=calcH(step.id);
+    if(hVal>0){
+      const hBot=my+mh*(hVal/tot);const hx=mx-5;
+      s+=`<line x1="${hx}" y1="${my}" x2="${hx}" y2="${hBot}" stroke="#333" stroke-width="0.6"/>`;
+      s+=`<path d="M${hx-2} ${my+3}L${hx} ${my}L${hx+2} ${my+3}" fill="none" stroke="#333" stroke-width="0.6"/>`;
+      s+=`<path d="M${hx-2} ${hBot-3}L${hx} ${hBot}L${hx+2} ${hBot-3}" fill="none" stroke="#333" stroke-width="0.6"/>`;
+      s+=`<text x="${hx-2}" y="${(my+hBot)/2+2}" text-anchor="end" fill="#333" font-size="7" font-weight="bold" font-family="sans-serif">H</text>`;
+    }
+    // t寸法（左外、現工程の層）
+    if(step.tKey&&step.tKey!=="ta"){
+      const tl=lyMap[step.tKey];
+      if(tl){
+        const tx=mx-16;
+        s+=`<line x1="${tx}" y1="${tl.top}" x2="${tx}" y2="${tl.bot}" stroke="#C62828" stroke-width="0.6"/>`;
+        s+=`<path d="M${tx-2} ${tl.top+3}L${tx} ${tl.top}L${tx+2} ${tl.top+3}" fill="none" stroke="#C62828" stroke-width="0.6"/>`;
+        s+=`<path d="M${tx-2} ${tl.bot-3}L${tx} ${tl.bot}L${tx+2} ${tl.bot-3}" fill="none" stroke="#C62828" stroke-width="0.6"/>`;
+        s+=`<text x="${tx-2}" y="${(tl.top+tl.bot)/2+2}" text-anchor="end" fill="#C62828" font-size="6" font-weight="bold" font-family="sans-serif">${step.tKey}</text>`;
+      }
+    }
+    // ta左右（舗装工程）
+    if(step.tKey==="ta"){
+      const tl=lyMap["ta"];
+      if(tl){
+        const txL=mx+mw*0.25,txR=mx+mw*0.75;
+        [[txL,"ta(左)"],[txR,"ta(右)"]].forEach(([tx,lb])=>{
+          s+=`<line x1="${tx}" y1="${tl.top}" x2="${tx}" y2="${tl.bot}" stroke="#E65100" stroke-width="0.6"/>`;
+          s+=`<text x="${tx}" y="${tl.top-2}" text-anchor="middle" fill="#E65100" font-size="5" font-weight="bold" font-family="sans-serif">${lb}</text>`;
+        });
+      }
+    }
+    // extra (Hs/Dm) 表示
+    step.extra.forEach(ex=>{
+      const hsY=my+mh*(700/tot);
+      if(ex.key==="Hs"){
+        const ex1=mx+mw+3;
+        s+=`<line x1="${ex1}" y1="${pipeY}" x2="${ex1}" y2="${hsY}" stroke="#E65100" stroke-width="0.6"/>`;
+        s+=`<text x="${ex1+1}" y="${(pipeY+hsY)/2+2}" fill="#E65100" font-size="6" font-weight="bold" font-family="sans-serif">Hs</text>`;
+      }
+      if(ex.key==="Dm"){
+        const ex2=mx+mw+15;
+        s+=`<line x1="${ex2}" y1="${my}" x2="${ex2}" y2="${hsY}" stroke="${blue}" stroke-width="0.6"/>`;
+        s+=`<text x="${ex2+1}" y="${(my+hsY)/2+2}" fill="${blue}" font-size="6" font-weight="bold" font-family="sans-serif">Dm</text>`;
+      }
+    });
+    s+=`<text x="${pcx}" y="${my-3}" text-anchor="middle" fill="#666" font-size="6" font-family="sans-serif">Ba</text>`;
+    s+=`<text x="${pcx}" y="${my+mh+8}" text-anchor="middle" fill="#666" font-size="6" font-family="sans-serif">B</text>`;
+    s+=`</svg>`;
+    return s;
+  };
+
   const perPage=3;
   points.forEach(pt=>{
     for(let sIdx=0;sIdx<steps.length;sIdx+=perPage){
       html+=`<div class="step-page"><div class="step-hdr"><span>${pt.name} — 工程写真</span><span style="font-size:7px;color:#888">${PL[pipeType]} φ${dia} ${road.label}　${pt.date||""}</span></div>`;
       for(let i=0;i<perPage&&sIdx+i<steps.length;i++){
         const step=steps[sIdx+i];
-        html+=`<div class="step-card"><div class="step-photo">写真（${pt.name} ${step.name}）</div><div class="step-info">`;
+        html+=`<div class="step-card"><div class="step-photo">写真（${pt.name} ${step.name}）</div><div class="step-mz">${mkStepMz(step,pt)}</div><div class="step-info">`;
         html+=`<div class="step-title">${step.id}. ${step.name}　${pt.date||""}</div>`;
         html+=`<table><tr><th>項目</th><th>設計</th><th>実測</th><th>誤差</th><th>判定</th></tr>`;
         step.inputs.forEach(f=>{
