@@ -87,46 +87,46 @@ function generatePDF({header,pipeType,roadType,surfaceType,design,points,steps,d
   const getMeasured=(pt,it)=>{for(const s of steps){const k=`${s.id}_${it}`;if(pt.measured[k]!==undefined&&pt.measured[k]!=="")return Number(pt.measured[k]);for(const ex of s.extra){if(ex.key===it){const ek=`${s.id}_${it}`;if(pt.measured[ek]!==undefined&&pt.measured[ek]!=="")return Number(pt.measured[ek]);}}}return null;};
 
   const css=`*{margin:0;padding:0;box-sizing:border-box}
+html,body{margin:0;padding:0}
 body{font-family:"Hiragino Sans","MS Gothic",sans-serif;font-size:12px;color:#000;line-height:1.3}
-@media print{@page{size:A4 portrait;margin:8mm}body{margin:0}
-svg{width:100% !important;height:100% !important}
-.mid-l svg{min-height:120mm !important}
+@media print{@page{size:A4 portrait;margin:6mm}body{margin:0}
+svg{display:block}
+.mid-l svg{height:auto !important;max-height:100mm !important}
 .step-photo img{width:100% !important;height:100% !important;object-fit:cover !important}}
-.page{page-break-after:always;width:100%;display:flex;flex-direction:column;min-height:278mm}
+.page{page-break-after:always;width:100%;display:flex;flex-direction:column;height:270mm;overflow:hidden}
 table{border-collapse:collapse;width:100%}
-td,th{border:0.5px solid #333;padding:4px 6px;font-size:13px;vertical-align:middle}
-.lbl{background:#f5f5f0;text-align:center;font-weight:bold;font-size:12px;color:#333}
-.title{font-size:22px;font-weight:bold;text-align:center;letter-spacing:8px;padding:8px 0 10px}
-.seal{text-align:center;font-size:10px;color:#666;width:52px}
-.seal-box{height:36px}
-.mid{display:grid;grid-template-columns:60% 40%;border:0.5px solid #333;min-height:130mm}
-.mid-l{border-right:0.5px solid #333;padding:4mm;text-align:center;display:flex;flex-direction:column;align-items:stretch;justify-content:stretch}
-.mid-l svg{width:100%;height:100%;display:block;flex:1;min-height:120mm}
-.mid-r{padding:8px;font-size:12px}
-.mid-r table td{font-size:13px;padding:5px 8px}
-.chk{border:0.5px solid #333;padding:8px 10px;font-size:13px;color:#333;margin-top:-0.5px}
-.dt{flex:1}
-.dt td,.dt th{font-size:13px;text-align:center;padding:8px 4px;height:24px}
-.dt th{background:#f5f5f0;font-size:12px;padding:6px 4px;height:18px}
-.dt .no{font-weight:bold;background:#fafaf5;font-size:14px;height:22px}
+td,th{border:0.5px solid #333;padding:3px 5px;font-size:12px;vertical-align:middle}
+.lbl{background:#f5f5f0;text-align:center;font-weight:bold;font-size:11px;color:#333}
+.title{font-size:20px;font-weight:bold;text-align:center;letter-spacing:6px;padding:4px 0 6px}
+.seal{text-align:center;font-size:9px;color:#666;width:48px}
+.seal-box{height:28px}
+.mid{display:grid;grid-template-columns:58% 42%;border:0.5px solid #333;height:105mm}
+.mid-l{border-right:0.5px solid #333;padding:3mm;text-align:center;display:flex;flex-direction:column;align-items:stretch;justify-content:stretch;overflow:hidden}
+.mid-l svg{width:100%;height:100%;display:block;flex:1;max-height:100mm}
+.mid-r{padding:6px;font-size:11px;overflow:hidden}
+.mid-r table td{font-size:11px;padding:3px 5px}
+.chk{border:0.5px solid #333;padding:5px 8px;font-size:11px;color:#333;margin-top:-0.5px}
+.dt{flex:1;overflow:hidden}
+.dt td,.dt th{font-size:12px;text-align:center;padding:4px 3px;height:auto}
+.dt th{background:#f5f5f0;font-size:11px;padding:4px 3px}
+.dt .no{font-weight:bold;background:#fafaf5;font-size:13px}
 .dt .itm{text-align:left;padding-left:8px;color:#333;font-weight:bold;font-size:13px}
 .dt .sep{border-left:1.5px solid #000}
 .ok{color:#006633;font-weight:bold;font-size:15px}
 .ng{color:#cc0000;font-weight:bold;font-size:15px}
-.note{font-size:11px;color:#666;padding:3px 0}
-.step-page{page-break-after:always;display:flex;flex-direction:column;min-height:278mm}
-.step-hdr{font-size:16px;font-weight:bold;margin-bottom:4mm;display:flex;justify-content:space-between;padding-bottom:3mm;border-bottom:1px solid #333}
-.step-card{border:0.5px solid #333;margin-bottom:3mm;padding:3mm;display:grid;grid-template-columns:2fr 1fr;grid-template-rows:1fr auto;gap:3mm;flex:1;min-height:85mm}
-.step-photo{grid-row:1/3}
-.step-photo{border:1px solid #ccc;display:flex;align-items:center;justify-content:center;font-size:14px;color:#999;background:#fafafa;overflow:hidden;position:relative}
+.note{font-size:10px;color:#666;padding:2px 0}
+.step-page{page-break-after:always;display:flex;flex-direction:column;height:270mm;overflow:hidden}
+.step-hdr{font-size:14px;font-weight:bold;margin-bottom:3mm;display:flex;justify-content:space-between;padding-bottom:2mm;border-bottom:1px solid #333;flex-shrink:0}
+.step-card{border:0.5px solid #333;margin-bottom:2mm;padding:2.5mm;display:grid;grid-template-columns:1.8fr 1fr;grid-template-rows:1fr auto;gap:2.5mm;flex:1;overflow:hidden;min-height:0}
+.step-photo{grid-row:1/3;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;font-size:12px;color:#999;background:#fafafa;overflow:hidden;position:relative}
 .step-photo img{width:100%;height:100%;object-fit:cover;display:block}
-.step-mz{border:0.5px solid #ddd;padding:4px;display:flex;align-items:stretch;justify-content:stretch;background:#fafafa}
+.step-mz{border:0.5px solid #ddd;padding:3px;display:flex;align-items:stretch;justify-content:stretch;background:#fafafa;overflow:hidden}
 .step-mz svg{width:100%;height:100%;display:block;flex:1}
-.step-info{font-size:12px;display:flex;flex-direction:column}
-.step-info table td{font-size:13px;padding:4px 6px}
-.step-info table th{font-size:12px;padding:4px 6px}
-.step-title{font-weight:bold;font-size:15px;margin-bottom:4mm;padding-bottom:2mm;border-bottom:1px solid #ddd}
-.ftr{font-size:11px;color:#666;display:flex;justify-content:space-between;margin-top:3mm;padding-top:3mm;border-top:0.5px solid #ccc}`;
+.step-info{font-size:11px;display:flex;flex-direction:column;overflow:hidden}
+.step-info table td{font-size:11px;padding:2px 4px}
+.step-info table th{font-size:10px;padding:2px 4px}
+.step-title{font-weight:bold;font-size:12px;margin-bottom:2mm;padding-bottom:1mm;border-bottom:1px solid #ddd}
+.ftr{font-size:10px;color:#666;display:flex;justify-content:space-between;margin-top:2mm;padding-top:2mm;border-top:0.5px solid #ccc;flex-shrink:0}`;
 
   let html=`<html><head><meta charset="utf-8"><title>出来形_${header.projectName||""}</title><style>${css}</style></head><body>`;
 
