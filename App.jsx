@@ -91,8 +91,9 @@ html,body{margin:0;padding:0}
 body{font-family:"Hiragino Sans","MS Gothic",sans-serif;font-size:12px;color:#000;line-height:1.3}
 @media print{@page{size:A4 portrait;margin:6mm}body{margin:0}
 svg{display:block}
-.mid-l svg{height:auto !important;max-height:100mm !important}
-.step-photo img{width:100% !important;height:100% !important;object-fit:cover !important}}
+.mid-l svg{height:auto !important;max-height:97mm !important}
+.step-photo img{width:100% !important;height:100% !important;object-fit:cover !important}
+.page,.step-page{transform:scale(0.97);transform-origin:top left;width:103.1%}}
 .page{page-break-after:always;width:100%;display:flex;flex-direction:column;height:270mm;overflow:hidden}
 table{border-collapse:collapse;width:100%}
 td,th{border:0.5px solid #333;padding:3px 5px;font-size:12px;vertical-align:middle}
