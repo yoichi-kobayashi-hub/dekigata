@@ -356,11 +356,54 @@ td,th{border:0.5px solid #333;padding:3px 5px;font-size:12px;vertical-align:midd
   html+=`</body></html>`;
   const w=window.open("","_blank");
   w.document.write(html);w.document.close();
-  setTimeout(()=>{w.print();},500);
+  const doPrint=()=>{try{w.print();}catch(e){}};
+  setTimeout(()=>{
+    const imgs=w.document.images;
+    let pending=imgs.length;
+    if(pending===0){doPrint();return;}
+    let done=0;let printed=false;
+    const check=()=>{done++;if(done>=pending&&!printed){printed=true;doPrint();}};
+    for(const im of imgs){if(im.complete)check();else{im.onload=check;im.onerror=check;}}
+    setTimeout(()=>{if(!printed){printed=true;doPrint();}},6000);
+  },300);
 }
 
 // ═══════════════════════════════════════
 // メインApp
+// ═══════════════════════════════════════
+// Supabase 同期レイヤー
+// ═══════════════════════════════════════
+const SB_URL="https://xsptsrlbrherfqgayvna.supabase.co";
+const SB_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhzcHRzcmxicmhlcmZxZ2F5dm5hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1NTgyNTMsImV4cCI6MjA5MTEzNDI1M30.Os6Uy6qlTgpq-vBpcI8X_g_L2olrmUhinpTcGfZWgY8";
+const sbHeaders={"apikey":SB_KEY,"Authorization":`Bearer ${SB_KEY}`,"Content-Type":"application/json"};
+const genUUID=()=>(typeof crypto!=="undefined"&&crypto.randomUUID)?crypto.randomUUID():'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return(c==='x'?r:(r&0x3|0x8)).toString(16);});
+async function sbFetchProjects(){
+  const res=await fetch(`${SB_URL}/rest/v1/dekigata_projects?select=*&order=updated_at.desc`,{headers:sbHeaders});
+  if(!res.ok)throw new Error("fetch failed");
+  return res.json();
+}
+async function sbUpsertProject(id,name,data){
+  const res=await fetch(`${SB_URL}/rest/v1/dekigata_projects?on_conflict=id`,{
+    method:"POST",
+    headers:{...sbHeaders,"Prefer":"resolution=merge-duplicates"},
+    body:JSON.stringify({id,name,data,updated_at:new Date().toISOString()})
+  });
+  return res.ok;
+}
+async function sbDeleteProject(id){
+  const res=await fetch(`${SB_URL}/rest/v1/dekigata_projects?id=eq.${id}`,{method:"DELETE",headers:sbHeaders});
+  return res.ok;
+}
+async function sbUploadPhoto(path,blob){
+  const res=await fetch(`${SB_URL}/storage/v1/object/dekigata-photos/${path}`,{
+    method:"POST",
+    headers:{"apikey":SB_KEY,"Authorization":`Bearer ${SB_KEY}`,"Content-Type":"image/jpeg"},
+    body:blob
+  });
+  if(!res.ok)throw new Error("upload failed");
+  return `${SB_URL}/storage/v1/object/public/dekigata-photos/${path}`;
+}
+
 // ═══════════════════════════════════════
 export default function App(){
   const[locked,setLocked]=useState(true);
@@ -386,16 +429,43 @@ export default function App(){
   const[currentProjId,setCurrentProjId]=useState(null);
   const[loaded,setLoaded]=useState(false);
   const[showProjList,setShowProjList]=useState(false);
+  const[syncStatus,setSyncStatus]=useState("init");
+  const syncTimer=useRef(null);
+  const projToData=(p)=>{const{id,updatedAt,...rest}=p;return rest;};
 
-  // 起動時: localStorage から全プロジェクト読み込み
+  // 起動時: Supabase優先で読み込み、オフライン時はlocalStorage
   useEffect(()=>{
-    try{
-      const raw=localStorage.getItem("dekigata_projects");
-      if(raw){const pj=JSON.parse(raw);setProjects(pj);}
+    (async()=>{
+      let cloudOk=false;let cloudProjects=[];
+      try{
+        const rows=await sbFetchProjects();
+        cloudProjects=rows.map(r=>({id:r.id,...(r.data||{}),updatedAt:r.updated_at}));
+        cloudOk=true;
+      }catch(e){console.warn("cloud fetch failed",e);}
+      let local=[];
+      try{const raw=localStorage.getItem("dekigata_projects");if(raw)local=JSON.parse(raw);}catch(e){}
+      if(cloudOk){
+        // ローカルのみのプロジェクトをクラウドへ移行
+        for(const lp of local){
+          const exists=cloudProjects.find(c=>c.id===lp.id);
+          if(!exists){
+            const nid=String(lp.id).startsWith("p_")?genUUID():lp.id;
+            const proj={...lp,id:nid};
+            cloudProjects.push(proj);
+            sbUpsertProject(nid,proj.header?.projectName||"",projToData(proj)).catch(()=>{});
+          }
+        }
+        setProjects(cloudProjects);
+        setSyncStatus("synced");
+        try{localStorage.setItem("dekigata_projects",JSON.stringify(cloudProjects));}catch(e){}
+      }else{
+        setProjects(local);
+        setSyncStatus("offline");
+      }
       const cid=localStorage.getItem("dekigata_currentId");
       if(cid)setCurrentProjId(cid);
-    }catch(e){console.warn("load err",e);}
-    setLoaded(true);
+      setLoaded(true);
+    })();
   },[]);
 
   // 現在のプロジェクトが変わったら復元
@@ -414,7 +484,7 @@ export default function App(){
   // eslint-disable-next-line
   },[currentProjId,loaded]);
 
-  // 自動保存: 状態変化のたびに保存
+  // 自動保存: ローカル即時 + クラウドへ2秒debounce同期
   useEffect(()=>{
     if(!loaded||!inited||!currentProjId)return;
     const save={id:currentProjId,pipeType,roadType,surfaceType,header,design,points,updatedAt:new Date().toISOString()};
@@ -426,6 +496,14 @@ export default function App(){
       try{localStorage.setItem("dekigata_projects",JSON.stringify(next));}catch(e){console.warn("save err",e);}
       return next;
     });
+    setSyncStatus("syncing");
+    if(syncTimer.current)clearTimeout(syncTimer.current);
+    syncTimer.current=setTimeout(async()=>{
+      try{
+        const ok=await sbUpsertProject(currentProjId,header.projectName||"",{pipeType,roadType,surfaceType,header,design,points});
+        setSyncStatus(ok?"synced":"offline");
+      }catch(e){setSyncStatus("offline");}
+    },2000);
   // eslint-disable-next-line
   },[header,design,points,pipeType,roadType,surfaceType,loaded,inited,currentProjId]);
 
@@ -440,7 +518,7 @@ export default function App(){
       localStorage.setItem("dekigata_currentId",latest.id);
     }else{
       // 新規作成
-      const id="p_"+Date.now();
+      const id=genUUID();
       setCurrentProjId(id);
       localStorage.setItem("dekigata_currentId",id);
     }
@@ -448,7 +526,7 @@ export default function App(){
   },[loaded]);
 
   const newProject=()=>{
-    const id="p_"+Date.now();
+    const id=genUUID();
     setCurrentProjId(id);localStorage.setItem("dekigata_currentId",id);
     setPipeType("DCIP");setRoadType("shidou");setSurfaceType("asphalt");
     setHeader({projectName:"",location:"",diameter:150});
@@ -463,12 +541,13 @@ export default function App(){
   };
   const deleteProject=(id)=>{
     if(!confirm("このプロジェクトを削除しますか?"))return;
+    sbDeleteProject(id).catch(()=>{});
     setProjects(prev=>{
       const next=prev.filter(p=>p.id!==id);
       try{localStorage.setItem("dekigata_projects",JSON.stringify(next));}catch(e){}
       if(id===currentProjId){
         if(next.length>0){setCurrentProjId(next[0].id);localStorage.setItem("dekigata_currentId",next[0].id);}
-        else{const nid="p_"+Date.now();setCurrentProjId(nid);localStorage.setItem("dekigata_currentId",nid);setHeader({projectName:"",location:"",diameter:150});setDesign({});setPoints([]);setInited(false);}
+        else{const nid=genUUID();setCurrentProjId(nid);localStorage.setItem("dekigata_currentId",nid);setHeader({projectName:"",location:"",diameter:150});setDesign({});setPoints([]);setInited(false);}
       }
       return next;
     });
@@ -549,8 +628,16 @@ export default function App(){
           ctx.fillText(String(v),bbX+pad+Math.round(bbW*0.22),ty);
           ty+=lineH;
         });
-        const composited=canvas.toDataURL("image/jpeg",0.85);
-        setCur(p=>{const ph={...p.photos};const a=ph[photoStep]||[];ph[photoStep]=[...a,{data:composited,time:nowTime()}];return{...p,photos:ph};});
+        canvas.toBlob(async(blob)=>{
+          let src=null;
+          try{
+            const safe=(cur.name||"pt").replace(/[^a-zA-Z0-9._-]/g,"_");
+            const path=`${currentProjId||"misc"}/${safe}_s${photoStep}_${Date.now()}.jpg`;
+            src=await sbUploadPhoto(path,blob);
+          }catch(e){console.warn("photo upload failed, using base64",e);}
+          if(!src)src=canvas.toDataURL("image/jpeg",0.8);
+          setCur(p=>{const ph={...p.photos};const a=ph[photoStep]||[];ph[photoStep]=[...a,{data:src,time:nowTime()}];return{...p,photos:ph};});
+        },"image/jpeg",0.85);
       };
       img.src=ev.target.result;
     };
@@ -698,9 +785,11 @@ export default function App(){
   </div>);}
 
   // ═══ LIST ═══
+  const syncBadge=syncStatus==="synced"?{t:"☁ 同期済",c:"#2E7D32",bg:"#E8F5E9"}:syncStatus==="syncing"?{t:"☁ 同期中…",c:"#E65100",bg:"#FFF3E0"}:{t:"⚠ オフライン",c:"#C62828",bg:"#FFEBEE"};
   return(<div style={S.w}>
     <div style={S.top}><button style={S.bk} onClick={()=>setScreen("design")}>← 設計値</button>
       <h1 style={{fontSize:16,fontWeight:700,margin:0,flex:1,textAlign:"center",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{header.projectName||"出来形管理"}</h1>
+      <span style={{fontSize:10,fontWeight:600,color:syncBadge.c,background:syncBadge.bg,padding:"3px 8px",borderRadius:10,whiteSpace:"nowrap"}}>{syncBadge.t}</span>
       <button style={{...S.bk,fontSize:18,padding:"4px 8px"}} onClick={()=>setShowProjList(true)} title="プロジェクト一覧">≡</button></div>
     <div style={{display:"flex",gap:6,fontSize:11,color:"#888",padding:"0 4px",marginBottom:10,flexWrap:"wrap"}}>
       <span>{PL[pipeType]}</span><span>φ{dia}</span><span>{road.label}</span><span>{steps.length}工程</span></div>
