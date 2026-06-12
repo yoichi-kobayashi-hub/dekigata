@@ -369,6 +369,80 @@ td,th{border:0.5px solid #333;padding:3px 5px;font-size:12px;vertical-align:midd
 }
 
 // ═══════════════════════════════════════
+// 写真台帳PDF（蔵衛門スタイル：着手前及び完成）
+// ═══════════════════════════════════════
+function generateAlbumPDF({header,albumPhotos,albumPositions}){
+  const posIdx=(p)=>{const i=albumPositions.indexOf(p);return i<0?999:i;};
+  const sortFn=(a,b)=>posIdx(a.position)-posIdx(b.position)||(a.time||"").localeCompare(b.time||"");
+  const pre=albumPhotos.filter(p=>p.phase==="pre").sort(sortFn);
+  const comp=albumPhotos.filter(p=>p.phase==="comp").sort(sortFn);
+  const css=`*{margin:0;padding:0;box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font-family:"Hiragino Sans","MS Gothic",sans-serif;font-size:12px;color:#000;line-height:1.4}
+@media print{@page{size:A4 portrait;margin:8mm}body{margin:0}
+.al-cover{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+.al-cover{page-break-after:always;height:272mm;background:#5b87c5;border:2mm solid #4a76b4;display:flex;flex-direction:column;align-items:center;padding:14mm;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.al-title{color:#f7ecbe;font-size:46px;font-weight:bold;letter-spacing:12px;margin-top:38mm}
+.al-cover-photo{margin-top:auto;margin-bottom:14mm;width:78%}
+.al-cover-photo img{width:100%;display:block}
+.al-page{page-break-after:always;height:272mm;display:flex;flex-direction:column;padding-top:10mm;position:relative}
+.al-pgnum{position:absolute;top:0;right:2mm;font-size:15px}
+.al-block{display:grid;gap:5mm;flex:1;min-height:0;margin-bottom:5mm;align-items:start}
+.al-block.pl{grid-template-columns:57% 1fr}
+.al-block.pr{grid-template-columns:1fr 57%}
+.al-photo{display:flex;align-items:flex-start;height:100%}
+.al-photo img{width:100%;max-height:80mm;object-fit:cover;display:block}
+.al-txt{font-size:12px;padding-top:0.5mm}
+.al-field{border-bottom:0.4px solid #888;padding:1px 0 2px;min-height:16px}
+.al-gap{height:8px}
+.al-line{border-bottom:0.4px solid #aaa;height:15px}`;
+  let html=`<html><head><meta charset="utf-8"><title>写真台帳_${header.projectName||""}</title><style>${css}</style></head><body>`;
+  const coverPhoto=pre[0]||comp[0];
+  html+=`<div class="al-cover"><div class="al-title">着手前及び完成</div>${coverPhoto?`<div class="al-cover-photo"><img src="${coverPhoto.data}"/></div>`:""}</div>`;
+  const batches=[];
+  const maxLen=Math.max(pre.length,comp.length);
+  for(let i=0;i<maxLen;i+=3){
+    const pb=pre.slice(i,i+3);const cb=comp.slice(i,i+3);
+    if(pb.length)batches.push(pb);
+    if(cb.length)batches.push(cb);
+  }
+  let pgNum=0;
+  batches.forEach(batch=>{
+    pgNum++;
+    const photoLeft=pgNum%2===1;
+    html+=`<div class="al-page"><div class="al-pgnum">${pgNum}</div>`;
+    batch.forEach(ph=>{
+      const phaseLabel=ph.phase==="pre"?"着手前":"完成";
+      const txt=`<div class="al-txt">
+        <div class="al-field">分　類：着手前及び完成</div>
+        <div class="al-field">工　種：</div>
+        <div class="al-field">場　所：${header.location||""}</div>
+        <div class="al-gap"></div>
+        <div class="al-field">${phaseLabel}</div>
+        <div class="al-field">${ph.position}</div>
+        ${'<div class="al-line"></div>'.repeat(11)}
+      </div>`;
+      const pho=`<div class="al-photo"><img src="${ph.data}"/></div>`;
+      html+=`<div class="al-block ${photoLeft?"pl":"pr"}">${photoLeft?pho+txt:txt+pho}</div>`;
+    });
+    html+=`</div>`;
+  });
+  html+=`</body></html>`;
+  const w=window.open("","_blank");
+  w.document.write(html);w.document.close();
+  const doPrint=()=>{try{w.print();}catch(e){}};
+  setTimeout(()=>{
+    const imgs=w.document.images;
+    let pending=imgs.length;
+    if(pending===0){doPrint();return;}
+    let done=0;let printed=false;
+    const check=()=>{done++;if(done>=pending&&!printed){printed=true;doPrint();}};
+    for(const im of imgs){if(im.complete)check();else{im.onload=check;im.onerror=check;}}
+    setTimeout(()=>{if(!printed){printed=true;doPrint();}},6000);
+  },300);
+}
+
+// ═══════════════════════════════════════
 // メインApp
 // ═══════════════════════════════════════
 // Supabase 同期レイヤー
@@ -425,6 +499,10 @@ export default function App(){
   const[camStep,setCamStep]=useState(null);
   const fileRef=useRef(null);
   const[photoStep,setPhotoStep]=useState(null);
+  const[albumTarget,setAlbumTarget]=useState(null);
+  const[albumPhotos,setAlbumPhotos]=useState([]);
+  const[albumPositions,setAlbumPositions]=useState(["始点","中間点","終点"]);
+  const[newPosName,setNewPosName]=useState("");
   const[projects,setProjects]=useState([]);
   const[currentProjId,setCurrentProjId]=useState(null);
   const[loaded,setLoaded]=useState(false);
@@ -479,6 +557,8 @@ export default function App(){
       setHeader(pj.header||{projectName:"",location:"",diameter:150});
       setDesign(pj.design||{});
       setPoints(pj.points||[]);
+      setAlbumPhotos(pj.albumPhotos||[]);
+      setAlbumPositions(pj.albumPositions&&pj.albumPositions.length?pj.albumPositions:["始点","中間点","終点"]);
       setInited(true);
     }
   // eslint-disable-next-line
@@ -487,7 +567,7 @@ export default function App(){
   // 自動保存: ローカル即時 + クラウドへ2秒debounce同期
   useEffect(()=>{
     if(!loaded||!inited||!currentProjId)return;
-    const save={id:currentProjId,pipeType,roadType,surfaceType,header,design,points,updatedAt:new Date().toISOString()};
+    const save={id:currentProjId,pipeType,roadType,surfaceType,header,design,points,albumPhotos,albumPositions,updatedAt:new Date().toISOString()};
     setProjects(prev=>{
       const idx=prev.findIndex(p=>p.id===currentProjId);
       let next;
@@ -500,12 +580,12 @@ export default function App(){
     if(syncTimer.current)clearTimeout(syncTimer.current);
     syncTimer.current=setTimeout(async()=>{
       try{
-        const ok=await sbUpsertProject(currentProjId,header.projectName||"",{pipeType,roadType,surfaceType,header,design,points});
+        const ok=await sbUpsertProject(currentProjId,header.projectName||"",{pipeType,roadType,surfaceType,header,design,points,albumPhotos,albumPositions});
         setSyncStatus(ok?"synced":"offline");
       }catch(e){setSyncStatus("offline");}
     },2000);
   // eslint-disable-next-line
-  },[header,design,points,pipeType,roadType,surfaceType,loaded,inited,currentProjId]);
+  },[header,design,points,albumPhotos,albumPositions,pipeType,roadType,surfaceType,loaded,inited,currentProjId]);
 
   // 初期プロジェクト作成 or 既存ロード
   useEffect(()=>{
@@ -530,7 +610,7 @@ export default function App(){
     setCurrentProjId(id);localStorage.setItem("dekigata_currentId",id);
     setPipeType("DCIP");setRoadType("shidou");setSurfaceType("asphalt");
     setHeader({projectName:"",location:"",diameter:150});
-    setDesign({});setPoints([]);setInited(false);
+    setDesign({});setPoints([]);setAlbumPhotos([]);setAlbumPositions(["始点","中間点","終点"]);setInited(false);
     setScreen("setup");setShowProjList(false);
     setToast("新規プロジェクト作成");setTimeout(()=>setToast(""),2000);
   };
@@ -547,7 +627,7 @@ export default function App(){
       try{localStorage.setItem("dekigata_projects",JSON.stringify(next));}catch(e){}
       if(id===currentProjId){
         if(next.length>0){setCurrentProjId(next[0].id);localStorage.setItem("dekigata_currentId",next[0].id);}
-        else{const nid=genUUID();setCurrentProjId(nid);localStorage.setItem("dekigata_currentId",nid);setHeader({projectName:"",location:"",diameter:150});setDesign({});setPoints([]);setInited(false);}
+        else{const nid=genUUID();setCurrentProjId(nid);localStorage.setItem("dekigata_currentId",nid);setHeader({projectName:"",location:"",diameter:150});setDesign({});setPoints([]);setAlbumPhotos([]);setAlbumPositions(["始点","中間点","終点"]);setInited(false);}
       }
       return next;
     });
@@ -580,14 +660,14 @@ export default function App(){
   const editPoint=(i)=>{const p=JSON.parse(JSON.stringify(points[i]));if(!p.photos)p.photos={};setCur(p);setEditIdx(i);setScreen("entry");};
   const savePoint=()=>{if(editIdx!==null)setPoints(p=>{const n=[...p];n[editIdx]={...cur};return n;});setScreen("list");};
 
-  const takePhoto=(stepId)=>{setPhotoStep(stepId);if(fileRef.current){fileRef.current.value="";fileRef.current.click();}};
+  const takePhoto=(stepId)=>{setAlbumTarget(null);setPhotoStep(stepId);if(fileRef.current){fileRef.current.value="";fileRef.current.click();}};
+  const takeAlbumPhoto=(phase,position)=>{setPhotoStep(null);setAlbumTarget({phase,position});if(fileRef.current){fileRef.current.value="";fileRef.current.click();}};
   const onPhotoTaken=(e)=>{
-    const file=e.target.files?.[0];if(!file||photoStep===null)return;
+    const file=e.target.files?.[0];if(!file||(photoStep===null&&!albumTarget))return;
     const reader=new FileReader();
     reader.onload=(ev)=>{
       const img=new Image();
       img.onload=()=>{
-        const step=steps.find(s=>s.id===photoStep);
         const canvas=document.createElement("canvas");
         canvas.width=img.width;canvas.height=img.height;
         const ctx=canvas.getContext("2d");
@@ -597,46 +677,82 @@ export default function App(){
         const bbH=Math.round(img.height*0.30);
         const bbX=Math.round(img.width*0.02);
         const bbY=img.height-bbH-Math.round(img.height*0.02);
-        // 深緑背景 + 白枠
         ctx.fillStyle="#0a4d2e";ctx.fillRect(bbX,bbY,bbW,bbH);
-        ctx.strokeStyle="#f5f5dc";ctx.lineWidth=Math.max(3,bbW*0.008);
-        ctx.strokeRect(bbX+4,bbY+4,bbW-8,bbH-8);
-        // チョーク風白文字
+        ctx.strokeStyle="#f5f5dc";ctx.lineWidth=Math.max(2,bbW*0.006);
+        ctx.strokeRect(bbX+3,bbY+3,bbW-6,bbH-6);
         ctx.fillStyle="#f5f5dc";
         const pad=Math.round(bbW*0.04);
-        const baseFs=Math.round(bbH*0.10);
-        const lineH=Math.round(bbH*0.115);
-        ctx.font=`bold ${Math.round(baseFs*0.85)}px "Hiragino Sans","MS Gothic",sans-serif`;
-        let ty=bbY+pad+baseFs;
-        const lines=[];
-        if(header.projectName)lines.push(["工事名",header.projectName.length>12?header.projectName.slice(0,12)+"…":header.projectName]);
-        lines.push(["測点",cur.name||""]);
-        lines.push(["工程",`${step.id}.${step.name}`]);
-        lines.push(["管種",`${PL[pipeType]} φ${dia}`]);
-        const hVal=(()=>{if(step.id===1)return H0;const bs=steps.find(s=>s.tKey==="t0");if(bs&&step.id===bs.id)return H0-(Number(design.t0)||0);let h=D;let a=false;for(const x of steps){if(x.inputs.includes("D")){a=true;continue;}if(!a)continue;if(x.id>step.id)break;if(x.tKey&&x.tKey!=="t0"&&design[x.tKey])h-=Number(design[x.tKey]);}return h;})();
-        if(step.inputs.includes("H"))lines.push(["設計H",`${hVal}mm`]);
-        if(step.inputs.includes("D"))lines.push(["設計D",`${D}mm`]);
-        if(step.inputs.includes("Ba"))lines.push(["設計Ba",`${design.Ba||""}mm`]);
-        if(step.tKey&&design[step.tKey])lines.push([step.tKey,`${design[step.tKey]}mm`]);
-        lines.push(["日付",cur.date||today()]);
-        lines.push(["会社","(有)信濃住宅設備"]);
-        lines.forEach(([k,v])=>{
-          if(ty>bbY+bbH-pad)return;
-          ctx.font=`bold ${Math.round(baseFs*0.7)}px "Hiragino Sans","MS Gothic",sans-serif`;
-          ctx.fillText(k,bbX+pad,ty);
-          ctx.font=`bold ${Math.round(baseFs*0.85)}px "Hiragino Sans","MS Gothic",sans-serif`;
-          ctx.fillText(String(v),bbX+pad+Math.round(bbW*0.22),ty);
-          ty+=lineH;
-        });
+        if(albumTarget){
+          // ── 蔵衛門スタイル表組み黒板 ──
+          const lw=Math.max(1.5,bbW*0.004);
+          ctx.strokeStyle="#f5f5dc";ctx.lineWidth=lw;
+          const rowH=Math.round(bbH*0.13);
+          const labelW=Math.round(bbW*0.24);
+          const rows=[["工事件名",header.projectName||""],["分　類","着手前及び完成"],["工　種",""],["場　所",header.location||""]];
+          let ry=bbY+3;
+          const fsL=Math.round(rowH*0.42);const fsV=Math.round(rowH*0.46);
+          rows.forEach(([k,v])=>{
+            ctx.strokeRect(bbX+3,ry,labelW,rowH);
+            ctx.strokeRect(bbX+3+labelW,ry,bbW-6-labelW,rowH);
+            ctx.font=`bold ${fsL}px "Hiragino Sans","MS Gothic",sans-serif`;
+            ctx.fillText(k,bbX+3+Math.round(labelW*0.08),ry+rowH*0.66);
+            ctx.font=`bold ${fsV}px "Hiragino Sans","MS Gothic",sans-serif`;
+            let vv=String(v);
+            const maxW=bbW-6-labelW-pad;
+            while(vv&&ctx.measureText(vv).width>maxW)vv=vv.slice(0,-1);
+            ctx.fillText(vv,bbX+3+labelW+Math.round(pad*0.6),ry+rowH*0.66);
+            ry+=rowH;
+          });
+          // 中央に大きく「着手前/完成 + 位置」
+          const phaseLabel=albumTarget.phase==="pre"?"着手前":"完成";
+          const centerY=ry+(bbY+bbH-ry)/2;
+          const bigFs=Math.round(bbH*0.135);
+          ctx.font=`bold ${bigFs}px "Hiragino Sans","MS Gothic",sans-serif`;
+          ctx.textAlign="center";
+          ctx.fillText(phaseLabel,bbX+bbW/2,centerY-bigFs*0.2);
+          ctx.fillText(albumTarget.position,bbX+bbW/2,centerY+bigFs*1.0);
+          ctx.textAlign="left";
+        }else{
+          // ── 工程用 key-value黒板 ──
+          const step=steps.find(s=>s.id===photoStep);
+          const baseFs=Math.round(bbH*0.10);
+          const lineH=Math.round(bbH*0.115);
+          let ty=bbY+pad+baseFs;
+          const lines=[];
+          if(header.projectName)lines.push(["工事名",header.projectName.length>12?header.projectName.slice(0,12)+"…":header.projectName]);
+          lines.push(["測点",cur.name||""]);
+          lines.push(["工程",`${step.id}.${step.name}`]);
+          lines.push(["管種",`${PL[pipeType]} φ${dia}`]);
+          const hVal=(()=>{if(step.id===1)return H0;const bs=steps.find(s=>s.tKey==="t0");if(bs&&step.id===bs.id)return H0-(Number(design.t0)||0);let h=D;let a=false;for(const x of steps){if(x.inputs.includes("D")){a=true;continue;}if(!a)continue;if(x.id>step.id)break;if(x.tKey&&x.tKey!=="t0"&&design[x.tKey])h-=Number(design[x.tKey]);}return h;})();
+          if(step.inputs.includes("H"))lines.push(["設計H",`${hVal}mm`]);
+          if(step.inputs.includes("D"))lines.push(["設計D",`${D}mm`]);
+          if(step.inputs.includes("Ba"))lines.push(["設計Ba",`${design.Ba||""}mm`]);
+          if(step.tKey&&design[step.tKey])lines.push([step.tKey,`${design[step.tKey]}mm`]);
+          lines.push(["日付",cur.date||today()]);
+          lines.push(["会社","(有)信濃住宅設備"]);
+          lines.forEach(([k,v])=>{
+            if(ty>bbY+bbH-pad)return;
+            ctx.font=`bold ${Math.round(baseFs*0.7)}px "Hiragino Sans","MS Gothic",sans-serif`;
+            ctx.fillText(k,bbX+pad,ty);
+            ctx.font=`bold ${Math.round(baseFs*0.85)}px "Hiragino Sans","MS Gothic",sans-serif`;
+            ctx.fillText(String(v),bbX+pad+Math.round(bbW*0.22),ty);
+            ty+=lineH;
+          });
+        }
         canvas.toBlob(async(blob)=>{
           let src=null;
           try{
-            const safe=(cur.name||"pt").replace(/[^a-zA-Z0-9._-]/g,"_");
-            const path=`${currentProjId||"misc"}/${safe}_s${photoStep}_${Date.now()}.jpg`;
+            const tag=albumTarget?`album_${albumTarget.phase}`:`${(cur.name||"pt").replace(/[^a-zA-Z0-9._-]/g,"_")}_s${photoStep}`;
+            const path=`${currentProjId||"misc"}/${tag}_${Date.now()}.jpg`;
             src=await sbUploadPhoto(path,blob);
           }catch(e){console.warn("photo upload failed, using base64",e);}
           if(!src)src=canvas.toDataURL("image/jpeg",0.8);
-          setCur(p=>{const ph={...p.photos};const a=ph[photoStep]||[];ph[photoStep]=[...a,{data:src,time:nowTime()}];return{...p,photos:ph};});
+          if(albumTarget){
+            const at=albumTarget;
+            setAlbumPhotos(p=>[...p,{id:genUUID(),phase:at.phase,position:at.position,data:src,time:nowTime()}]);
+          }else{
+            setCur(p=>{const ph={...p.photos};const a=ph[photoStep]||[];ph[photoStep]=[...a,{data:src,time:nowTime()}];return{...p,photos:ph};});
+          }
         },"image/jpeg",0.85);
       };
       img.src=ev.target.result;
@@ -784,6 +900,48 @@ export default function App(){
       <img src={viewPhoto} style={{maxWidth:"100%",maxHeight:"90vh",borderRadius:12}}/></div>)}
   </div>);}
 
+  // ═══ ALBUM（着手前及び完成 写真台帳） ═══
+  if(screen==="album"){
+    const delAlbumPhoto=(id)=>setAlbumPhotos(p=>p.filter(x=>x.id!==id));
+    const addPos=()=>{const n=newPosName.trim();if(!n||albumPositions.includes(n))return;setAlbumPositions(p=>[...p,n]);setNewPosName("");};
+    const delPos=(pos)=>{if(albumPhotos.some(p=>p.position===pos)){if(!confirm(`「${pos}」の写真も削除されます。削除しますか?`))return;setAlbumPhotos(p=>p.filter(x=>x.position!==pos));}setAlbumPositions(p=>p.filter(x=>x!==pos));};
+    const handleAlbumPDF=()=>{generateAlbumPDF({header,albumPhotos,albumPositions});setToast("写真台帳PDF出力");setTimeout(()=>setToast(""),3000);};
+    return(<div style={S.w}>
+      <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={onPhotoTaken}/>
+      <div style={S.top}><button style={S.bk} onClick={()=>setScreen("list")}>← 戻る</button><span style={S.bg}>着手前及び完成</span></div>
+      <div style={{fontSize:11,color:"#888",padding:"0 4px",marginBottom:10}}>位置ごとに着手前・完成を撮影。出来形の測点とは別に始点(0M)・終点も撮れます。</div>
+      {albumPositions.map(pos=>{
+        const prePhotos=albumPhotos.filter(p=>p.position===pos&&p.phase==="pre");
+        const compPhotos=albumPhotos.filter(p=>p.position===pos&&p.phase==="comp");
+        const thumb=(ph)=>(<div key={ph.id} style={{position:"relative"}}>
+          <img src={ph.data} onClick={()=>setViewPhoto(ph.data)} style={{width:60,height:60,objectFit:"cover",borderRadius:8,border:"1px solid #ddd",cursor:"pointer"}}/>
+          <button onClick={()=>delAlbumPhoto(ph.id)} style={{position:"absolute",top:-6,right:-6,width:20,height:20,borderRadius:10,background:"#C62828",color:"#fff",border:"none",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>×</button></div>);
+        return(<div key={pos} style={S.c}>
+          <div style={{display:"flex",alignItems:"center",marginBottom:8}}>
+            <span style={{fontSize:15,fontWeight:700,flex:1}}>{pos}</span>
+            <button onClick={()=>delPos(pos)} style={{...S.sm,fontSize:12,color:"#C62828"}}>位置削除</button></div>
+          <div style={{display:"flex",gap:8}}>
+            <div style={{flex:1,padding:"8px",borderRadius:8,background:"#FFF8E1",border:"1px solid #FFE082"}}>
+              <button onClick={()=>takeAlbumPhoto("pre",pos)} style={{...S.camBtn,width:"100%",background:"#FFF3E0",borderColor:"#E65100",color:"#E65100"}}>📷 着手前{prePhotos.length>0?` ${prePhotos.length}`:""}</button>
+              {prePhotos.length>0&&<div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>{prePhotos.map(thumb)}</div>}
+            </div>
+            <div style={{flex:1,padding:"8px",borderRadius:8,background:"#E8F5E9",border:"1px solid #A5D6A7"}}>
+              <button onClick={()=>takeAlbumPhoto("comp",pos)} style={{...S.camBtn,width:"100%",background:"#E8F5E9",borderColor:"#2E7D32",color:"#2E7D32"}}>📷 完成{compPhotos.length>0?` ${compPhotos.length}`:""}</button>
+              {compPhotos.length>0&&<div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>{compPhotos.map(thumb)}</div>}
+            </div>
+          </div>
+        </div>);})}
+      <div style={S.c}>
+        <div style={S.ch}>位置を追加</div>
+        <div style={{display:"flex",gap:8}}>
+          <input style={{...S.inp,flex:1}} value={newPosName} onChange={e=>setNewPosName(e.target.value)} placeholder="例: 中間点②"/>
+          <button style={{...S.camBtn,flexShrink:0}} onClick={addPos}>+ 追加</button></div></div>
+      <button style={S.exp} onClick={handleAlbumPDF}>写真台帳PDF出力（表紙+台帳）</button>
+      {viewPhoto&&(<div onClick={()=>setViewPhoto(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+        <img src={viewPhoto} style={{maxWidth:"100%",maxHeight:"90vh",borderRadius:12}}/></div>)}
+      {toast&&<div style={S.to}>{toast}</div>}
+    </div>);}
+
   // ═══ LIST ═══
   const syncBadge=syncStatus==="synced"?{t:"☁ 同期済",c:"#2E7D32",bg:"#E8F5E9"}:syncStatus==="syncing"?{t:"☁ 同期中…",c:"#E65100",bg:"#FFF3E0"}:{t:"⚠ オフライン",c:"#C62828",bg:"#FFEBEE"};
   return(<div style={S.w}>
@@ -811,6 +969,7 @@ export default function App(){
           <button style={{...S.sm,fontSize:14,fontWeight:700}} onClick={()=>editPoint(idx)}>入力→</button></div></div>);})}
     <div style={{display:"flex",flexDirection:"column",gap:8,marginTop:12}}>
       <button style={{...S.pri,background:"#fff",color:"#1565C0",border:"2px solid #1565C0"}} onClick={()=>setPoints(p=>[...p,{name:`No.${p.length+1}`,date:"",measured:{},photos:{}}])}>+ 測点追加</button>
+      <button style={{...S.exp,background:"#FFF3E0",color:"#E65100",border:"1px solid #FFCC80"}} onClick={()=>setScreen("album")}>📷 着手前及び完成（写真台帳）</button>
       <button style={S.exp} onClick={handlePDF}>PDF出力（表紙+各工程）</button>
       <button style={{...S.exp,background:"#E3F2FD",color:"#1565C0",border:"1px solid #90CAF9"}} onClick={()=>{
         let csv="\uFEFF";csv+=`工事名,${header.projectName}\n\n`;csv+=`測点,工程,項目,設計,実測,誤差,判定,日付\n`;
