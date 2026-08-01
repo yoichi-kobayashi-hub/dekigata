@@ -477,6 +477,15 @@ async function sbUploadPhoto(path,blob){
   if(!res.ok)throw new Error("upload failed");
   return `${SB_URL}/storage/v1/object/public/dekigata-photos/${path}`;
 }
+async function sbFetchTemplates(){
+  const res=await fetch(`${SB_URL}/rest/v1/dekigata_templates?select=*&order=sort_order.asc`,{headers:sbHeaders});
+  if(!res.ok)throw new Error("tpl fetch failed");
+  return res.json();
+}
+async function sbSaveTemplate(name,items){
+  const res=await fetch(`${SB_URL}/rest/v1/dekigata_templates`,{method:"POST",headers:sbHeaders,body:JSON.stringify({name,items,sort_order:99})});
+  return res.ok;
+}
 
 // ═══════════════════════════════════════
 export default function App(){
@@ -503,6 +512,12 @@ export default function App(){
   const[albumPhotos,setAlbumPhotos]=useState([]);
   const[albumPositions,setAlbumPositions]=useState(["始点","中間点","終点"]);
   const[newPosName,setNewPosName]=useState("");
+  const[checkTarget,setCheckTarget]=useState(null);
+  const[checkItems,setCheckItems]=useState([]);
+  const[checkPhotos,setCheckPhotos]=useState({});
+  const[templates,setTemplates]=useState([]);
+  const[tplLoaded,setTplLoaded]=useState(false);
+  const[newItemName,setNewItemName]=useState("");
   const[projects,setProjects]=useState([]);
   const[currentProjId,setCurrentProjId]=useState(null);
   const[loaded,setLoaded]=useState(false);
@@ -559,6 +574,8 @@ export default function App(){
       setPoints(pj.points||[]);
       setAlbumPhotos(pj.albumPhotos||[]);
       setAlbumPositions(pj.albumPositions&&pj.albumPositions.length?pj.albumPositions:["始点","中間点","終点"]);
+      setCheckItems(pj.checkItems||[]);
+      setCheckPhotos(pj.checkPhotos||{});
       setInited(true);
     }
   // eslint-disable-next-line
@@ -567,7 +584,7 @@ export default function App(){
   // 自動保存: ローカル即時 + クラウドへ2秒debounce同期
   useEffect(()=>{
     if(!loaded||!inited||!currentProjId)return;
-    const save={id:currentProjId,pipeType,roadType,surfaceType,header,design,points,albumPhotos,albumPositions,updatedAt:new Date().toISOString()};
+    const save={id:currentProjId,pipeType,roadType,surfaceType,header,design,points,albumPhotos,albumPositions,checkItems,checkPhotos,updatedAt:new Date().toISOString()};
     setProjects(prev=>{
       const idx=prev.findIndex(p=>p.id===currentProjId);
       let next;
@@ -580,12 +597,12 @@ export default function App(){
     if(syncTimer.current)clearTimeout(syncTimer.current);
     syncTimer.current=setTimeout(async()=>{
       try{
-        const ok=await sbUpsertProject(currentProjId,header.projectName||"",{pipeType,roadType,surfaceType,header,design,points,albumPhotos,albumPositions});
+        const ok=await sbUpsertProject(currentProjId,header.projectName||"",{pipeType,roadType,surfaceType,header,design,points,albumPhotos,albumPositions,checkItems,checkPhotos});
         setSyncStatus(ok?"synced":"offline");
       }catch(e){setSyncStatus("offline");}
     },2000);
   // eslint-disable-next-line
-  },[header,design,points,albumPhotos,albumPositions,pipeType,roadType,surfaceType,loaded,inited,currentProjId]);
+  },[header,design,points,albumPhotos,albumPositions,checkItems,checkPhotos,pipeType,roadType,surfaceType,loaded,inited,currentProjId]);
 
   // 初期プロジェクト作成 or 既存ロード
   useEffect(()=>{
@@ -605,12 +622,21 @@ export default function App(){
   // eslint-disable-next-line
   },[loaded]);
 
+  // チェックリスト画面に入ったらテンプレをSupabaseから取得
+  useEffect(()=>{
+    if(screen!=="check"||tplLoaded)return;
+    (async()=>{
+      try{const rows=await sbFetchTemplates();setTemplates(rows||[]);}catch(e){console.warn("tpl fetch failed",e);}
+      setTplLoaded(true);
+    })();
+  },[screen,tplLoaded]);
+
   const newProject=()=>{
     const id=genUUID();
     setCurrentProjId(id);localStorage.setItem("dekigata_currentId",id);
     setPipeType("DCIP");setRoadType("shidou");setSurfaceType("asphalt");
     setHeader({projectName:"",location:"",diameter:150});
-    setDesign({});setPoints([]);setAlbumPhotos([]);setAlbumPositions(["始点","中間点","終点"]);setInited(false);
+    setDesign({});setPoints([]);setAlbumPhotos([]);setAlbumPositions(["始点","中間点","終点"]);setCheckItems([]);setCheckPhotos({});setInited(false);
     setScreen("setup");setShowProjList(false);
     setToast("新規プロジェクト作成");setTimeout(()=>setToast(""),2000);
   };
@@ -627,7 +653,7 @@ export default function App(){
       try{localStorage.setItem("dekigata_projects",JSON.stringify(next));}catch(e){}
       if(id===currentProjId){
         if(next.length>0){setCurrentProjId(next[0].id);localStorage.setItem("dekigata_currentId",next[0].id);}
-        else{const nid=genUUID();setCurrentProjId(nid);localStorage.setItem("dekigata_currentId",nid);setHeader({projectName:"",location:"",diameter:150});setDesign({});setPoints([]);setAlbumPhotos([]);setAlbumPositions(["始点","中間点","終点"]);setInited(false);}
+        else{const nid=genUUID();setCurrentProjId(nid);localStorage.setItem("dekigata_currentId",nid);setHeader({projectName:"",location:"",diameter:150});setDesign({});setPoints([]);setAlbumPhotos([]);setAlbumPositions(["始点","中間点","終点"]);setCheckItems([]);setCheckPhotos({});setInited(false);}
       }
       return next;
     });
@@ -660,10 +686,11 @@ export default function App(){
   const editPoint=(i)=>{const p=JSON.parse(JSON.stringify(points[i]));if(!p.photos)p.photos={};setCur(p);setEditIdx(i);setScreen("entry");};
   const savePoint=()=>{if(editIdx!==null)setPoints(p=>{const n=[...p];n[editIdx]={...cur};return n;});setScreen("list");};
 
-  const takePhoto=(stepId)=>{setAlbumTarget(null);setPhotoStep(stepId);if(fileRef.current){fileRef.current.value="";fileRef.current.click();}};
-  const takeAlbumPhoto=(phase,position)=>{setPhotoStep(null);setAlbumTarget({phase,position});if(fileRef.current){fileRef.current.value="";fileRef.current.click();}};
+  const takePhoto=(stepId)=>{setAlbumTarget(null);setCheckTarget(null);setPhotoStep(stepId);if(fileRef.current){fileRef.current.value="";fileRef.current.click();}};
+  const takeAlbumPhoto=(phase,position)=>{setPhotoStep(null);setCheckTarget(null);setAlbumTarget({phase,position});if(fileRef.current){fileRef.current.value="";fileRef.current.click();}};
+  const takeCheckPhoto=(item)=>{setPhotoStep(null);setAlbumTarget(null);setCheckTarget(item);if(fileRef.current){fileRef.current.value="";fileRef.current.click();}};
   const onPhotoTaken=(e)=>{
-    const file=e.target.files?.[0];if(!file||(photoStep===null&&!albumTarget))return;
+    const file=e.target.files?.[0];if(!file||(photoStep===null&&!albumTarget&&!checkTarget))return;
     const reader=new FileReader();
     reader.onload=(ev)=>{
       const img=new Image();
@@ -682,7 +709,37 @@ export default function App(){
         ctx.strokeRect(bbX+3,bbY+3,bbW-6,bbH-6);
         ctx.fillStyle="#f5f5dc";
         const pad=Math.round(bbW*0.04);
-        if(albumTarget){
+        if(checkTarget){
+          // ── チェックリスト用 表組み黒板（中央=項目名） ──
+          const lw=Math.max(1.5,bbW*0.004);
+          ctx.strokeStyle="#f5f5dc";ctx.lineWidth=lw;
+          const rowH=Math.round(bbH*0.13);
+          const labelW=Math.round(bbW*0.24);
+          const rows=[["工事件名",header.projectName||""],["分　類","工事写真"],["工　種",""],["場　所",header.location||""]];
+          let ry=bbY+3;
+          const fsL=Math.round(rowH*0.42);const fsV=Math.round(rowH*0.46);
+          rows.forEach(([k,v])=>{
+            ctx.strokeRect(bbX+3,ry,labelW,rowH);
+            ctx.strokeRect(bbX+3+labelW,ry,bbW-6-labelW,rowH);
+            ctx.font=`bold ${fsL}px "Hiragino Sans","MS Gothic",sans-serif`;
+            ctx.fillText(k,bbX+3+Math.round(labelW*0.08),ry+rowH*0.66);
+            ctx.font=`bold ${fsV}px "Hiragino Sans","MS Gothic",sans-serif`;
+            let vv=String(v);
+            const maxW=bbW-6-labelW-pad;
+            while(vv&&ctx.measureText(vv).width>maxW)vv=vv.slice(0,-1);
+            ctx.fillText(vv,bbX+3+labelW+Math.round(pad*0.6),ry+rowH*0.66);
+            ry+=rowH;
+          });
+          const centerY=ry+(bbY+bbH-ry)/2;
+          let bigFs=Math.round(bbH*0.13);
+          ctx.textAlign="center";
+          ctx.font=`bold ${bigFs}px "Hiragino Sans","MS Gothic",sans-serif`;
+          while(bigFs>10&&ctx.measureText(checkTarget).width>bbW-pad*2){bigFs-=2;ctx.font=`bold ${bigFs}px "Hiragino Sans","MS Gothic",sans-serif`;}
+          ctx.fillText(checkTarget,bbX+bbW/2,centerY);
+          ctx.font=`bold ${Math.round(bbH*0.07)}px "Hiragino Sans","MS Gothic",sans-serif`;
+          ctx.fillText(today(),bbX+bbW/2,centerY+bigFs*1.1);
+          ctx.textAlign="left";
+        }else if(albumTarget){
           // ── 蔵衛門スタイル表組み黒板 ──
           const lw=Math.max(1.5,bbW*0.004);
           ctx.strokeStyle="#f5f5dc";ctx.lineWidth=lw;
@@ -742,12 +799,15 @@ export default function App(){
         canvas.toBlob(async(blob)=>{
           let src=null;
           try{
-            const tag=albumTarget?`album_${albumTarget.phase}`:`${(cur.name||"pt").replace(/[^a-zA-Z0-9._-]/g,"_")}_s${photoStep}`;
+            const tag=checkTarget?"check":albumTarget?`album_${albumTarget.phase}`:`${(cur.name||"pt").replace(/[^a-zA-Z0-9._-]/g,"_")}_s${photoStep}`;
             const path=`${currentProjId||"misc"}/${tag}_${Date.now()}.jpg`;
             src=await sbUploadPhoto(path,blob);
           }catch(e){console.warn("photo upload failed, using base64",e);}
           if(!src)src=canvas.toDataURL("image/jpeg",0.8);
-          if(albumTarget){
+          if(checkTarget){
+            const it=checkTarget;
+            setCheckPhotos(p=>({...p,[it]:[...(p[it]||[]),{data:src,time:nowTime()}]}));
+          }else if(albumTarget){
             const at=albumTarget;
             setAlbumPhotos(p=>[...p,{id:genUUID(),phase:at.phase,position:at.position,data:src,time:nowTime()}]);
           }else{
@@ -900,6 +960,72 @@ export default function App(){
       <img src={viewPhoto} style={{maxWidth:"100%",maxHeight:"90vh",borderRadius:12}}/></div>)}
   </div>);}
 
+  // ═══ CHECK（撮影チェックリスト） ═══
+  if(screen==="check"){
+    const delCheckPhoto=(item,idx)=>{setCheckPhotos(p=>{const n={...p};const a=[...(n[item]||[])];a.splice(idx,1);n[item]=a;return n;});};
+    const delItem=(item)=>{
+      if((checkPhotos[item]||[]).length>0){if(!confirm(`「${item}」の写真も削除されます。削除しますか?`))return;}
+      setCheckItems(p=>p.filter(x=>x!==item));
+      setCheckPhotos(p=>{const n={...p};delete n[item];return n;});
+    };
+    const addItem=()=>{const n=newItemName.trim();if(!n||checkItems.includes(n))return;setCheckItems(p=>[...p,n]);setNewItemName("");};
+    const applyTpl=(tpl)=>{setCheckItems(Array.isArray(tpl.items)?tpl.items:[]);setToast(`「${tpl.name}」を適用`);setTimeout(()=>setToast(""),2000);};
+    const resetTpl=()=>{if(!confirm("チェックリストをリセットしますか?（撮影済み写真も消えます）"))return;setCheckItems([]);setCheckPhotos({});};
+    const saveTpl=async()=>{
+      const name=prompt("テンプレート名を入力（全工事で使い回せます）");
+      if(!name)return;
+      const ok=await sbSaveTemplate(name,checkItems).catch(()=>false);
+      if(ok){setTplLoaded(false);setToast("テンプレート保存済み");}else{setToast("保存失敗（オフライン?）");}
+      setTimeout(()=>setToast(""),2500);
+    };
+    const doneN=checkItems.filter(it=>((checkPhotos[it]||[]).length>0)).length;
+    const remainN=checkItems.length-doneN;
+    return(<div style={S.w}>
+      <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={onPhotoTaken}/>
+      <div style={S.top}><button style={S.bk} onClick={()=>setScreen("list")}>← 戻る</button><span style={S.bg}>撮影チェックリスト</span></div>
+      {checkItems.length===0?(<>
+        <div style={{fontSize:12,color:"#666",padding:"0 4px",marginBottom:10}}>工事種別テンプレを選ぶと撮影リストが展開されます。撮ると自動で✓が付き、取り忘れが一目で分かります。</div>
+        {!tplLoaded?(<div style={{...S.c,textAlign:"center",color:"#888"}}>テンプレート読込中…</div>):(
+          templates.length===0?(<div style={{...S.c,textAlign:"center",color:"#888",fontSize:12}}>テンプレートがありません。<br/>SupabaseでSQLを実行してください。<br/>（下の「空のリストで開始」でも使えます）</div>):(
+            templates.map(tpl=>(<button key={tpl.id} onClick={()=>applyTpl(tpl)} style={{...S.c,width:"100%",textAlign:"left",cursor:"pointer",border:"1px solid #ddd"}}>
+              <div style={{fontSize:15,fontWeight:700}}>{tpl.name}</div>
+              <div style={{fontSize:11,color:"#888",marginTop:4}}>{(Array.isArray(tpl.items)?tpl.items:[]).length}項目：{(Array.isArray(tpl.items)?tpl.items:[]).slice(0,5).join(" / ")}{(tpl.items||[]).length>5?" …":""}</div>
+            </button>))
+          ))}
+        <button style={{...S.exp,marginTop:4}} onClick={()=>setCheckItems(["着手前","完了"])}>空のリストで開始（項目は自分で追加）</button>
+      </>):(<>
+        <div style={{...S.c,display:"flex",alignItems:"center",gap:10,background:remainN>0?"#FFF3E0":"#E8F5E9",border:`1px solid ${remainN>0?"#FFCC80":"#A5D6A7"}`}}>
+          <span style={{fontSize:22}}>{remainN>0?"📷":"✅"}</span>
+          <div style={{flex:1}}>
+            <div style={{fontSize:15,fontWeight:700,color:remainN>0?"#E65100":"#2E7D32"}}>{remainN>0?`未撮影 ${remainN}件`:"全項目 撮影済み!"}</div>
+            <div style={{fontSize:11,color:"#888"}}>{doneN} / {checkItems.length} 完了</div></div>
+          <button onClick={resetTpl} style={{...S.sm,fontSize:11,color:"#C62828"}}>リセット</button></div>
+        {checkItems.map(item=>{
+          const photos=checkPhotos[item]||[];
+          const done=photos.length>0;
+          return(<div key={item} style={{...S.c,borderLeft:`4px solid ${done?"#2E7D32":"#FFB74D"}`,padding:"10px 14px"}}>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:18,width:24,textAlign:"center"}}>{done?"✅":"⬜"}</span>
+              <span style={{fontSize:14,fontWeight:600,flex:1,color:done?"#2E7D32":"#333"}}>{item}</span>
+              <button onClick={()=>takeCheckPhoto(item)} style={S.camBtn}>📷{done?` ${photos.length}`:""}</button>
+              <button onClick={()=>delItem(item)} style={{...S.sm,fontSize:12,color:"#C62828",padding:"4px 6px"}}>×</button></div>
+            {done&&(<div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
+              {photos.map((ph,pi)=>(<div key={pi} style={{position:"relative"}}>
+                <img src={ph.data} onClick={()=>setViewPhoto(ph.data)} style={{width:56,height:56,objectFit:"cover",borderRadius:8,border:"1px solid #ddd",cursor:"pointer"}}/>
+                <button onClick={()=>delCheckPhoto(item,pi)} style={{position:"absolute",top:-6,right:-6,width:20,height:20,borderRadius:10,background:"#C62828",color:"#fff",border:"none",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>×</button></div>))}</div>)}
+          </div>);})}
+        <div style={S.c}>
+          <div style={S.ch}>項目を追加</div>
+          <div style={{display:"flex",gap:8}}>
+            <input style={{...S.inp,flex:1}} value={newItemName} onChange={e=>setNewItemName(e.target.value)} placeholder="例: 水圧試験"/>
+            <button style={{...S.camBtn,flexShrink:0}} onClick={addItem}>+ 追加</button></div></div>
+        <button style={{...S.exp,background:"#E3F2FD",color:"#1565C0",border:"1px solid #90CAF9"}} onClick={saveTpl}>このリストをテンプレとして保存（全工事で使い回し）</button>
+      </>)}
+      {viewPhoto&&(<div onClick={()=>setViewPhoto(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+        <img src={viewPhoto} style={{maxWidth:"100%",maxHeight:"90vh",borderRadius:12}}/></div>)}
+      {toast&&<div style={S.to}>{toast}</div>}
+    </div>);}
+
   // ═══ ALBUM（着手前及び完成 写真台帳） ═══
   if(screen==="album"){
     const delAlbumPhoto=(id)=>setAlbumPhotos(p=>p.filter(x=>x.id!==id));
@@ -970,6 +1096,7 @@ export default function App(){
     <div style={{display:"flex",flexDirection:"column",gap:8,marginTop:12}}>
       <button style={{...S.pri,background:"#fff",color:"#1565C0",border:"2px solid #1565C0"}} onClick={()=>setPoints(p=>[...p,{name:`No.${p.length+1}`,date:"",measured:{},photos:{}}])}>+ 測点追加</button>
       <button style={{...S.exp,background:"#FFF3E0",color:"#E65100",border:"1px solid #FFCC80"}} onClick={()=>setScreen("album")}>📷 着手前及び完成（写真台帳）</button>
+      <button style={{...S.exp,background:checkItems.length>0&&checkItems.filter(it=>!((checkPhotos[it]||[]).length>0)).length>0?"#FFEBEE":"#F5F5F5",color:checkItems.length>0&&checkItems.filter(it=>!((checkPhotos[it]||[]).length>0)).length>0?"#C62828":"#555",border:"1px solid #ddd"}} onClick={()=>setScreen("check")}>✓ 撮影チェックリスト{checkItems.length>0?(()=>{const r=checkItems.filter(it=>!((checkPhotos[it]||[]).length>0)).length;return r>0?`（未撮影 ${r}件）`:"（完了✅）";})():""}</button>
       <button style={S.exp} onClick={handlePDF}>PDF出力（表紙+各工程）</button>
       <button style={{...S.exp,background:"#E3F2FD",color:"#1565C0",border:"1px solid #90CAF9"}} onClick={()=>{
         let csv="\uFEFF";csv+=`工事名,${header.projectName}\n\n`;csv+=`測点,工程,項目,設計,実測,誤差,判定,日付\n`;
