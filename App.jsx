@@ -629,7 +629,7 @@ export default function App(){
 
   // チェックリスト画面に入ったらテンプレをSupabaseから取得
   useEffect(()=>{
-    if(screen!=="check"||tplLoaded)return;
+    if((screen!=="check"&&screen!=="setup")||tplLoaded)return;
     (async()=>{
       try{const rows=await sbFetchTemplates();setTemplates(rows||[]);}catch(e){console.warn("tpl fetch failed",e);}
       setTplLoaded(true);
@@ -640,7 +640,7 @@ export default function App(){
     const id=genUUID();
     setCurrentProjId(id);localStorage.setItem("dekigata_currentId",id);
     setPipeType("DCIP");setRoadType("shidou");setSurfaceType("asphalt");
-    setHeader({projectName:"",location:"",diameter:150});
+    setHeader({projectName:"",location:"",diameter:150,projectType:""});
     setDesign({});setPoints([]);setAlbumPhotos([]);setAlbumPositions(["始点","中間点","終点"]);setCheckItems([]);setCheckPhotos({});setCheckNotes({});setCheckDims({});setInited(false);
     setScreen("setup");setShowProjList(false);
     setToast("新規プロジェクト作成");setTimeout(()=>setToast(""),2000);
@@ -658,7 +658,7 @@ export default function App(){
       try{localStorage.setItem("dekigata_projects",JSON.stringify(next));}catch(e){}
       if(id===currentProjId){
         if(next.length>0){setCurrentProjId(next[0].id);localStorage.setItem("dekigata_currentId",next[0].id);}
-        else{const nid=genUUID();setCurrentProjId(nid);localStorage.setItem("dekigata_currentId",nid);setHeader({projectName:"",location:"",diameter:150});setDesign({});setPoints([]);setAlbumPhotos([]);setAlbumPositions(["始点","中間点","終点"]);setCheckItems([]);setCheckPhotos({});setCheckNotes({});setCheckDims({});setInited(false);}
+        else{const nid=genUUID();setCurrentProjId(nid);localStorage.setItem("dekigata_currentId",nid);setHeader({projectName:"",location:"",diameter:150,projectType:""});setDesign({});setPoints([]);setAlbumPhotos([]);setAlbumPositions(["始点","中間点","終点"]);setCheckItems([]);setCheckPhotos({});setCheckNotes({});setCheckDims({});setInited(false);}
       }
       return next;
     });
@@ -727,7 +727,7 @@ export default function App(){
           ctx.strokeStyle="#f5f5dc";ctx.lineWidth=lw;
           const rowH=Math.round(bbH*0.13);
           const labelW=Math.round(bbW*0.24);
-          const rows=[["工事件名",header.projectName||""],["分　類","工事写真"],["工　種",""],["場　所",header.location||""]];
+          const rows=[["工事件名",header.projectName||""],["分　類","工事写真"],["工　種",`${header.workKind||""}${header.diameter?` φ${header.diameter}`:""}`.trim()],["場　所",header.location||""]];
           let ry=bbY+3;
           const fsL=Math.round(rowH*0.42);const fsV=Math.round(rowH*0.46);
           rows.forEach(([k,v])=>{
@@ -869,8 +869,33 @@ export default function App(){
       <button style={{...S.pri,width:220,marginTop:12}} onClick={tryUnlock}>入場</button></div>);}
 
   // ═══ SETUP ═══
-  if(screen==="setup"){const dias=getDias(pipeType);return(<div style={S.w}>
-    <div style={S.top}><h1 style={S.logo}>出来形かんたん</h1><div style={{display:"flex",alignItems:"center",gap:6}}><span style={S.bg}>1/3</span><button style={{...S.bk,fontSize:20,padding:"4px 8px"}} onClick={()=>setShowProjList(true)} title="プロジェクト一覧">≡</button></div></div>
+  if(screen==="setup"){const dias=getDias(pipeType);
+    const workMode=header.projectType===undefined?"public":header.projectType;
+    const selSimple=(tpl)=>{setHeader(h=>({...h,projectType:"simple",workKind:tpl.name,diameter:""}));setCheckItems(Array.isArray(tpl.items)?tpl.items:[]);};
+    const selPublic=()=>{setHeader(h=>({...h,projectType:"public",workKind:"",diameter:h.diameter&&Number(h.diameter)>0?Number(h.diameter):150}));};
+    return(<div style={S.w}>
+    <div style={S.top}><h1 style={S.logo}>出来形かんたん</h1><div style={{display:"flex",alignItems:"center",gap:6}}><span style={S.bg}>{workMode==="simple"?"簡易":"1/3"}</span><button style={{...S.bk,fontSize:20,padding:"4px 8px"}} onClick={()=>setShowProjList(true)} title="プロジェクト一覧">≡</button></div></div>
+    <div style={S.c}><div style={S.ch}>工事情報</div>
+      {[["projectName","工事名"],["location","工事箇所"]].map(([k,l])=>(<div key={k} style={{marginBottom:8}}><label style={S.lb}>{l}</label><input style={S.inp} value={header[k]||""} onChange={e=>setHeader(h=>({...h,[k]:e.target.value}))} placeholder={l}/></div>))}</div>
+    <div style={S.c}><div style={S.ch}>工種を選ぶ</div>
+      <div style={{display:"flex",flexDirection:"column",gap:6}}>
+        {(templates||[]).map(tpl=>(<button key={tpl.id} onClick={()=>selSimple(tpl)} style={{...S.sel,textAlign:"left",padding:"10px 14px",...(workMode==="simple"&&header.workKind===tpl.name?S.selOn:{})}}>
+          <div style={{fontSize:14,fontWeight:700}}>{tpl.name}</div>
+          <div style={{fontSize:10,opacity:.6}}>{(Array.isArray(tpl.items)?tpl.items:[]).length}項目・撮影チェックリスト</div></button>))}
+        {!tplLoaded&&<div style={{fontSize:11,color:"#888",textAlign:"center",padding:"6px 0"}}>工種テンプレ読込中…</div>}
+        <button onClick={selPublic} style={{...S.sel,textAlign:"left",padding:"10px 14px",borderWidth:2,...(workMode==="public"?S.selOn:{})}}>
+          <div style={{fontSize:14,fontWeight:700}}>公共工事・配水管布設（出来形管理）</div>
+          <div style={{fontSize:10,opacity:.6}}>測点・検測・検査記録表・写真台帳フル装備</div></button>
+      </div></div>
+    {workMode==="simple"&&<>
+      <div style={S.c}><div style={S.ch}>口径（任意）</div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:18,fontWeight:700}}>φ</span>
+          <input inputMode="decimal" style={{...S.inp,width:110,fontSize:17,textAlign:"right",fontWeight:700}} value={header.diameter||""} onChange={e=>setHeader(h=>({...h,diameter:e.target.value.replace(/[^0-9.]/g,"")}))} placeholder="20"/>
+          <span style={{fontSize:11,color:"#888"}}>黒板に入ります（空欄OK・後から変更可）</span></div></div>
+      <button style={S.pri} onClick={()=>setScreen("check")}>📷 撮影スタート →</button>
+    </>}
+    {workMode==="public"&&<>
     <div style={S.c}><div style={S.ch}>管種</div><div style={{display:"flex",gap:6}}>
       {["DCIP","HPPE"].map(k=>(<button key={k} onClick={()=>selPipe(k)} style={{...S.sel,flex:1,...(pipeType===k?S.selOn:{})}}><div style={{fontSize:14,fontWeight:700}}>{k}</div><div style={{fontSize:10,opacity:.6}}>{k==="DCIP"?"ダクタイル鋳鉄管":"ポリエチレン管"}</div></button>))}
       <button onClick={()=>selPipe("SHIKIRI")} style={{...S.sel,flex:.7,...(pipeType==="SHIKIRI"?S.selOn:{})}}><div style={{fontSize:12,fontWeight:700}}>仕切弁筐</div></button></div></div>
@@ -882,9 +907,8 @@ export default function App(){
       <div style={S.c}><div style={S.ch}>口径</div><div style={{display:"flex",flexWrap:"wrap",gap:6}}>
         {dias.map(d=>(<button key={d} onClick={()=>setHeader(h=>({...h,diameter:d}))} style={{...S.db,...(dia===d?S.dbOn:{})}}><div style={{fontSize:15,fontWeight:700}}>φ{d}</div><div style={{fontSize:10,opacity:.6}}>OD {getOD(pipeType,d)}</div></button>))}</div></div>
     </>}
-    <div style={S.c}><div style={S.ch}>工事情報</div>
-      {[["projectName","工事名"],["location","工事箇所"]].map(([k,l])=>(<div key={k} style={{marginBottom:8}}><label style={S.lb}>{l}</label><input style={S.inp} value={header[k]} onChange={e=>setHeader(h=>({...h,[k]:e.target.value}))} placeholder={l}/></div>))}</div>
     <button style={S.pri} onClick={()=>setScreen("design")}>設計値確認 →</button>
+    </>}
     {showProjList&&(<div onClick={()=>setShowProjList(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:9999,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:20,paddingTop:60}}>
       <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:12,padding:20,maxWidth:480,width:"100%",maxHeight:"80vh",overflowY:"auto"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
@@ -895,7 +919,7 @@ export default function App(){
         {projects.length===0?(<div style={{textAlign:"center",padding:"20px 0",color:"#888",fontSize:13}}>プロジェクトなし</div>):(
           projects.sort((a,b)=>(b.updatedAt||"").localeCompare(a.updatedAt||"")).map(pj=>{
             const isCurrent=pj.id===currentProjId;
-            const pipeLabel=PL[pj.pipeType||"DCIP"];
+            const pipeLabel=pj.header?.workKind||PL[pj.pipeType||"DCIP"];
             const nameShow=pj.header?.projectName||"(名称未設定)";
             const ptsN=pj.points?.length||0;
             const dt=pj.updatedAt?new Date(pj.updatedAt).toLocaleString("ja-JP",{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}):"";
@@ -1014,7 +1038,7 @@ export default function App(){
     const remainN=checkItems.length-doneN;
     return(<div style={S.w}>
       <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={onPhotoTaken}/>
-      <div style={S.top}><button style={S.bk} onClick={()=>setScreen("list")}>← 戻る</button><span style={S.bg}>撮影チェックリスト</span></div>
+      <div style={S.top}><button style={S.bk} onClick={()=>setScreen(header.projectType==="simple"?"setup":"list")}>← 戻る</button><span style={S.bg}>撮影チェックリスト</span></div>
       {checkItems.length===0?(<>
         <div style={{fontSize:12,color:"#666",padding:"0 4px",marginBottom:10}}>工事種別テンプレを選ぶと撮影リストが展開されます。撮ると自動で✓が付き、取り忘れが一目で分かります。</div>
         {!tplLoaded?(<div style={{...S.c,textAlign:"center",color:"#888"}}>テンプレート読込中…</div>):(
@@ -1164,7 +1188,7 @@ export default function App(){
         {projects.length===0?(<div style={{textAlign:"center",padding:"20px 0",color:"#888",fontSize:13}}>プロジェクトなし</div>):(
           projects.sort((a,b)=>(b.updatedAt||"").localeCompare(a.updatedAt||"")).map(pj=>{
             const isCurrent=pj.id===currentProjId;
-            const pipeLabel=PL[pj.pipeType||"DCIP"];
+            const pipeLabel=pj.header?.workKind||PL[pj.pipeType||"DCIP"];
             const nameShow=pj.header?.projectName||"(名称未設定)";
             const ptsN=pj.points?.length||0;
             const dt=pj.updatedAt?new Date(pj.updatedAt).toLocaleString("ja-JP",{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}):"";
