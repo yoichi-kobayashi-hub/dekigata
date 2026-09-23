@@ -124,6 +124,7 @@ function generatePDF({header,pipeType,roadType,surfaceType,design,points,steps,d
     else designVals[it]=design[it]?Number(design[it]):null;
   });
   const judgeItem=(it,mv)=>{if(mv===null||designVals[it]===null)return"";const err=mv-designVals[it];const meta=FM[it];if(!meta)return"";if(meta.minus!==null&&err<-meta.minus)return"×";if(meta.plus!==null&&err>meta.plus)return"×";return"○";};
+  const dateFor=(pt,it)=>{const ds=pt.dates||{};let st=null;if(it==="Hs"||it==="Dm")st=steps.find(s=>s.extra&&s.extra.some(e=>e.key===it));else{st=steps.find(s=>s.tKey===it)||steps.find(s=>s.inputs.includes(it));}return(st&&ds[st.id])||pt.date||"";};
   const getMeasured=(pt,it)=>{const ts=steps.find(s=>s.tKey===it);if(ts){const tv=calcTm(ts,steps,pt.measured);return tv!==null?Math.round(tv):null;}for(const s of steps){const k=`${s.id}_${it}`;if(pt.measured[k]!==undefined&&pt.measured[k]!=="")return Number(pt.measured[k]);for(const ex of s.extra){if(ex.key===it){return autoExtra(ex,s,steps,pt.measured);}}}return null;};
 
   const css=`*{margin:0;padding:0;box-sizing:border-box}
@@ -255,9 +256,9 @@ td,th{border:0.5px solid #333;padding:3px 5px;font-size:12px;vertical-align:midd
     allItems.forEach(it=>{
       const dv=designVals[it];if(dv===null)return;
       const mL=getMeasured(ptL,it);const eL=mL!==null?mL-dv:null;const jL=mL!==null?judgeItem(it,mL):"";
-      html+=`<tr><td class="itm">${lbl(it)}</td><td>${dv}</td><td>${mL!==null?mL:""}</td><td>${eL!==null?(eL>0?"+":"")+eL:""}</td><td>${ptL.date||""}</td><td class="${jL==="○"?"ok":jL==="×"?"ng":""}">${jL}</td>`;
+      html+=`<tr><td class="itm">${lbl(it)}</td><td>${dv}</td><td>${mL!==null?mL:""}</td><td>${eL!==null?(eL>0?"+":"")+eL:""}</td><td>${dateFor(ptL,it)}</td><td class="${jL==="○"?"ok":jL==="×"?"ng":""}">${jL}</td>`;
       if(ptR){const mR=getMeasured(ptR,it);const eR=mR!==null?mR-dv:null;const jR=mR!==null?judgeItem(it,mR):"";
-        html+=`<td class="itm sep">${lbl(it)}</td><td>${dv}</td><td>${mR!==null?mR:""}</td><td>${eR!==null?(eR>0?"+":"")+eR:""}</td><td>${ptR.date||""}</td><td class="${jR==="○"?"ok":jR==="×"?"ng":""}">${jR}</td>`;
+        html+=`<td class="itm sep">${lbl(it)}</td><td>${dv}</td><td>${mR!==null?mR:""}</td><td>${eR!==null?(eR>0?"+":"")+eR:""}</td><td>${dateFor(ptR,it)}</td><td class="${jR==="○"?"ok":jR==="×"?"ng":""}">${jR}</td>`;
       }else html+=`<td class="sep" colspan="6"></td>`;
       html+=`</tr>`;
     });
@@ -392,12 +393,12 @@ td,th{border:0.5px solid #333;padding:3px 5px;font-size:12px;vertical-align:midd
           html+=`<div class="step-title">${step.name}</div>`;
           html+=`<div style="font-size:11px;color:#666">状況写真</div>`;
           {const spec=photoSpec(step.name);if(spec&&spec.length){const av=(k)=>k==="管径"?(pipe2?`φ${dia}+φ${pipe2.diameter}`:`φ${dia}`):"";const prs=fieldPairs(spec,(k)=>pt.measured[`${step.id}_f_${k}`],av);if(prs.length)html+=`<div style="font-size:11px;margin-top:3px">${prs.map(([k,v])=>`${k}：<b>${v}</b>`).join("　")}</div>`;}}
-          html+=`<div style="font-size:10px;color:#888;margin-top:auto">${pt.date||""}</div>`;
+          html+=`<div style="font-size:10px;color:#888;margin-top:auto">${((pt.dates||{})[step.id])||pt.date||""}</div>`;
           html+=`</div></div>`;
           continue;
         }
         html+=`<div class="step-card"><div class="step-photo">${photoContent}</div><div class="step-mz">${mkStepMz(step,pt)}</div><div class="step-info">`;
-        html+=`<div class="step-title">${step.id}. ${step.name}</div>`;
+        html+=`<div class="step-title">${step.id}. ${step.name}<span style="font-size:10px;color:#888;font-weight:normal;margin-left:6px">${((pt.dates||{})[step.id])||pt.date||""}</span></div>`;
         html+=`<table><tr><th>項目</th><th>設計</th><th>実測</th><th>判定</th></tr>`;
         step.inputs.forEach(f=>{
           let dVal=null;
@@ -923,7 +924,7 @@ export default function App(){
             if(step.tKey&&design[step.tKey]){const tD=Number(design[step.tKey]);const tM=calcTm(step,steps,cur.measured);if(tM!==null){const j=judge(tM-tD,step.tKey)||"";lines.push([step.tKey,`設${tD} 実${Math.round(tM)}${j}`]);}else lines.push([step.tKey,`設計${tD}`]);}
             step.extra.forEach(ex=>{const m=autoExtra(ex,step,steps,cur.measured);if(m!==null){const j=judge(m-ex.design,ex.key,ex)||"";lines.push([ex.key,`設${ex.design} 実${m}${j}`]);}});
           }
-          lines.push(["日付",cur.date||today()]);
+          lines.push(["日付",((cur.dates||{})[step.id])||today()]);
           lines.push(["会社","(有)信濃住宅設備"]);
           lines.forEach(([k,v])=>{
             if(ty>bbY+bbH-pad)return;
@@ -949,7 +950,7 @@ export default function App(){
             const at=albumTarget;
             setAlbumPhotos(p=>[...p,{id:genUUID(),phase:at.phase,position:at.position,data:src,time:nowTime()}]);
           }else{
-            setCur(p=>{const ph={...p.photos};const a=ph[photoStep]||[];ph[photoStep]=[...a,{data:src,time:nowTime()}];return{...p,photos:ph};});
+            setCur(p=>{const ph={...p.photos};const a=ph[photoStep]||[];ph[photoStep]=[...a,{data:src,time:nowTime()}];const ds={...(p.dates||{})};if(!ds[photoStep])ds[photoStep]=today();return{...p,photos:ph,dates:ds,date:p.date||today()};});
           }
         },"image/jpeg",0.85);
       };
@@ -1126,7 +1127,7 @@ export default function App(){
     </div>
     <div style={S.c}><div style={{display:"flex",gap:8}}>
       <div style={{flex:1}}><label style={S.lb}>測点</label><input style={{...S.inp,fontWeight:700,fontSize:18}} value={cur.name} onChange={e=>setCur(p=>({...p,name:e.target.value}))}/></div>
-      <div style={{flex:1}}><label style={S.lb}>日付</label><input type="date" style={S.inp} value={cur.date} onChange={e=>setCur(p=>({...p,date:e.target.value}))}/></div></div></div>
+      <div style={{flex:1}}><label style={S.lb}>日付（既定・工程ごとに📅で上書き可）</label><input type="date" style={S.inp} value={cur.date||""} onChange={e=>setCur(p=>({...p,date:e.target.value}))}/></div></div></div>
     {mergedSteps.map((step,stepIdx)=>{
       const photos=(cur.photos&&cur.photos[step.id])||[];
       const seqBadge=(<span style={{fontSize:11,color:"#999",fontWeight:600,flexShrink:0}}>{stepIdx+1}/{mergedSteps.length}</span>);
@@ -1137,6 +1138,7 @@ export default function App(){
             {seqBadge}
             <span style={{fontSize:18,width:24,textAlign:"center"}}>{done?"✅":"📷"}</span>
             <span style={{fontSize:13,fontWeight:600,flex:1,color:done?"#2E7D32":"#333"}}>{step.name}<span style={{fontSize:12,color:"#999",marginLeft:6}}>状況写真</span></span>
+            {(()=>{const sd=(cur.dates||{})[step.id]||"";return(<label style={{display:"flex",alignItems:"center",gap:2,fontSize:12,color:sd?"#1565C0":"#999",flexShrink:0}}>📅<input type="date" value={sd||cur.date||""} onChange={e=>setCur(p=>({...p,dates:{...(p.dates||{}),[step.id]:e.target.value}}))} style={{border:"none",background:"transparent",fontSize:12,color:"inherit",padding:0,width:112}}/></label>);})()}
             <button onClick={()=>takePhoto(step.id)} style={S.camBtn}>📷{done?` ${photos.length}`:""}</button></div>
           {(()=>{const spec=photoSpec(step.name);if(!spec||spec.length===0)return null;return renderFields(spec,(k)=>cur.measured[`${step.id}_f_${k}`]||"",(k,v)=>setCur(p=>({...p,measured:{...p.measured,[`${step.id}_f_${k}`]:v}})));})()}
           {done&&(<div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
@@ -1174,6 +1176,7 @@ export default function App(){
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
           {seqBadge}
           <span style={S.sn}>{step.id}</span><span style={{fontSize:15,fontWeight:700,flex:1}}>{step.name}{dState==="done"&&<span style={{fontSize:12,color:"#2E7D32",marginLeft:6}}>✅</span>}{dState==="partial"&&<span style={{fontSize:11,color:"#F9A825",marginLeft:6}}>{((cur.photos&&cur.photos[step.id])||[]).length>0?"数値未入力":"写真未撮影"}</span>}</span>
+          {(()=>{const sd=(cur.dates||{})[step.id]||"";return(<label style={{display:"flex",alignItems:"center",gap:2,fontSize:12,color:sd?"#1565C0":"#999",flexShrink:0}}>📅<input type="date" value={sd||cur.date||""} onChange={e=>setCur(p=>({...p,dates:{...(p.dates||{}),[step.id]:e.target.value}}))} style={{border:"none",background:"transparent",fontSize:12,color:"inherit",padding:0,width:112}}/></label>);})()}
           <button onClick={()=>takePhoto(step.id)} style={S.camBtn}>📷{photos.length>0?` ${photos.length}`:""}</button></div>
         {step.inputs.map(f=>{
           const d=dv(f,step.id);const key=`${step.id}_${f}`;const mv=cur.measured[key]??"";
@@ -1391,7 +1394,7 @@ export default function App(){
             {pc>0&&<span style={{fontSize:12,color:"#1565C0"}}>📷{pc}</span>}</div>
           <button style={{...S.sm,fontSize:14,fontWeight:700}} onClick={()=>editPoint(idx)}>入力→</button></div></div>);})}
     <div style={{display:"flex",flexDirection:"column",gap:8,marginTop:12}}>
-      <button style={{...S.pri,background:"#fff",color:"#1565C0",border:"2px solid #1565C0"}} onClick={()=>setPoints(p=>[...p,{name:`No.${p.length+1}`,date:"",measured:{},photos:{}}])}>+ 測点追加</button>
+      <button style={{...S.pri,background:"#fff",color:"#1565C0",border:"2px solid #1565C0"}} onClick={()=>setPoints(p=>[...p,{name:`No.${p.length+1}`,date:"",measured:{},photos:{},dates:{}}])}>+ 測点追加</button>
       {(()=>{
         if(hasAnchors||header.projectType==="simple")return null;
         const seq=(templates||[]).filter(t=>(Array.isArray(t.items)?t.items:[]).some(i=>String(i).trim().startsWith("@")));
