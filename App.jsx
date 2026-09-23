@@ -80,7 +80,7 @@ function getOD(p,d){return(p==="DCIP"?OD_DCIP:p==="HPPE"?OD_HPPE:{})[d]||0;}
 function getDias(p){return p==="DCIP"?DIAS_DCIP:p==="HPPE"?DIAS_HPPE:[];}
 function calcH0(p,D,d){const od=getOD(p,d);return p==="HPPE"?D+od+100:D+od;}
 const FM={H:{label:"深さ",minus:30,plus:30},B:{label:"幅",minus:50,plus:null},Ba:{label:"舗装幅",minus:25,plus:null},D:{label:"埋設深",minus:30,plus:30},D2:{label:"埋設深②",minus:30,plus:30},ta:{label:"舗装厚",minus:7,plus:null},t0:{label:"基礎砂",minus:30,plus:30},t1:{label:"保護砂",minus:30,plus:30},t2:{label:"発生土",minus:30,plus:30},t3:{label:"発生土",minus:30,plus:30},t4:{label:"発生土",minus:30,plus:30},t5:{label:"路盤",minus:30,plus:30},t6:{label:"路盤",minus:30,plus:30},t7:{label:"路盤",minus:30,plus:30},A:{label:"弁芯距離",minus:null,plus:25},Hs:{label:"シート",minus:30,plus:30},Dm:{label:"マーカー",minus:30,plus:30}};
-const APP_VERSION="2.0.1";
+const APP_VERSION="2.0.2";
 const PL={DCIP:"DCIP",HPPE:"HPPE",SHIKIRI:"仕切弁筐"};
 const DIM_LABELS=["深さ","幅","厚さ","延長","高さ","径"];
 const ZONE_A=["t1","t2","t3","t4"],ZONE_B=["t5","t6","t7"];
@@ -631,6 +631,8 @@ async function sbDeleteProject(id){
   return res.ok;
 }
 // Storageのキーは英数字と . _ - のみ。日本語や記号はハッシュに置換
+function countBase64(d){let n=0;const isB=(ph)=>ph&&typeof ph.data==="string"&&ph.data.startsWith("data:");(d.points||[]).forEach(pt=>Object.values(pt.photos||{}).forEach(arr=>(arr||[]).forEach(ph=>{if(isB(ph))n++;})));(d.albumPhotos||[]).forEach(ph=>{if(isB(ph))n++;});Object.values(d.checkPhotos||{}).forEach(arr=>(arr||[]).forEach(ph=>{if(isB(ph))n++;}));return n;}
+function hashStr(t){t=String(t||"");const samp=t.slice(0,4000)+"|"+t.length;let h=0;for(let i=0;i<samp.length;i++){h=(h*31+samp.charCodeAt(i))|0;}return "h"+(h>>>0).toString(36);}
 function safeKey(str){const t=String(str||"");if(/^[A-Za-z0-9._-]{1,40}$/.test(t))return t;let h=0;for(let i=0;i<t.length;i++){h=(h*31+t.charCodeAt(i))|0;}return "k"+(h>>>0).toString(36);}
 async function sbUploadPhoto(path,blob){
   const res=await fetch(`${SB_URL}/storage/v1/object/dekigata-photos/${path}`,{
@@ -683,6 +685,7 @@ export default function App(){
   const[tplLoaded,setTplLoaded]=useState(false);
   const[newItemName,setNewItemName]=useState("");
   const[checkNotes,setCheckNotes]=useState({});
+  const[unsynced,setUnsynced]=useState(0);
   const[fontScale,setFontScale]=useState(()=>{try{const v=localStorage.getItem("dekigata_zoom");return v?Number(v):1.15;}catch(e){return 1.15;}});
   const setZoom=(z)=>{setFontScale(z);try{localStorage.setItem("dekigata_zoom",String(z));}catch(e){}};
   const[checkDims,setCheckDims]=useState({});
@@ -758,6 +761,8 @@ export default function App(){
       const n=applyData(d);
       if(localDirty){snapRef.current={updatedAt:null,data:null};dirtyRef.current=true;setTimeout(()=>{if(syncSaveRef.current)syncSaveRef.current();},1500);}
       else{snapRef.current={updatedAt:pj.updatedAt||null,data:n};dirtyRef.current=false;}
+      const nb=countBase64(n);setUnsynced(nb);
+      if(nb>0){dirtyRef.current=true;setTimeout(()=>{if(syncSaveRef.current)syncSaveRef.current();},1500);}
       setInited(true);
     }
   // eslint-disable-next-line
@@ -768,7 +773,6 @@ export default function App(){
 
   // クラウド保存: 条件付き更新 → 衝突したら取得→3wayマージ→再試行（他端末の入力を消さない）
   const savingRef=useRef(false);const rerunRef=useRef(false);
-  const[unsynced,setUnsynced]=useState(0);
   const syncSave=async()=>{
     const id=currentProjId;if(!id)return;
     if(savingRef.current){rerunRef.current=true;return;}
@@ -778,9 +782,9 @@ export default function App(){
   const flushBase64=async(id,local)=>{
     let changed=false;let remain=0;const repl=new Map();
     const up=async(dataUrl,tag)=>{try{const blob=await(await fetch(dataUrl)).blob();const u=await sbUploadPhoto(`${id}/${tag}_${Date.now()}_${Math.random().toString(36).slice(2,6)}.jpg`,blob);if(u)repl.set(dataUrl,u);return u;}catch(e){return null;}};
-    for(const pt of (local.points||[])){for(const k of Object.keys(pt.photos||{})){for(const ph of (pt.photos[k]||[])){if(ph&&typeof ph.data==="string"&&ph.data.startsWith("data:")){const u=await up(ph.data,`${safeKey(pt.name)}_${safeKey(k)}`);if(u){ph.data=u;changed=true;}else remain++;}}}}
-    for(const ph of (local.albumPhotos||[])){if(ph&&typeof ph.data==="string"&&ph.data.startsWith("data:")){const u=await up(ph.data,`album_${safeKey(ph.phase||"x")}`);if(u){ph.data=u;changed=true;}else remain++;}}
-    for(const k of Object.keys(local.checkPhotos||{})){for(const ph of (local.checkPhotos[k]||[])){if(ph&&typeof ph.data==="string"&&ph.data.startsWith("data:")){const u=await up(ph.data,`check_${safeKey(k)}`);if(u){ph.data=u;changed=true;}else remain++;}}}
+    for(const pt of (local.points||[])){for(const k of Object.keys(pt.photos||{})){for(const ph of (pt.photos[k]||[])){if(ph&&typeof ph.data==="string"&&ph.data.startsWith("data:")){if(!ph.id)ph.id=hashStr(ph.data);const u=await up(ph.data,`${safeKey(pt.name)}_${safeKey(k)}`);if(u){ph.data=u;changed=true;}else remain++;}}}}
+    for(const ph of (local.albumPhotos||[])){if(ph&&typeof ph.data==="string"&&ph.data.startsWith("data:")){if(!ph.id)ph.id=hashStr(ph.data);const u=await up(ph.data,`album_${safeKey(ph.phase||"x")}`);if(u){ph.data=u;changed=true;}else remain++;}}
+    for(const k of Object.keys(local.checkPhotos||{})){for(const ph of (local.checkPhotos[k]||[])){if(ph&&typeof ph.data==="string"&&ph.data.startsWith("data:")){if(!ph.id)ph.id=hashStr(ph.data);const u=await up(ph.data,`check_${safeKey(k)}`);if(u){ph.data=u;changed=true;}else remain++;}}}
     if(repl.size>0)setCur(p=>{const ph={...(p.photos||{})};let ch=false;for(const k of Object.keys(ph)){ph[k]=(ph[k]||[]).map(x=>(x&&repl.has(x.data))?(ch=true,{...x,data:repl.get(x.data)}):x);}return ch?{...p,photos:ph}:p;});
     return{changed,remain};
   };
@@ -843,6 +847,7 @@ export default function App(){
         snapRef.current={updatedAt:row.updated_at,data:row.data||{}};
         mirrorLocal(currentProjId,row.data||{},row.updated_at,false);
         setSyncStatus("synced");setToast("他端末の更新を取り込みました");setTimeout(()=>setToast(""),2500);
+        const nb2=countBase64(row.data||{});setUnsynced(nb2);if(nb2>0){dirtyRef.current=true;setTimeout(()=>{if(syncSaveRef.current)syncSaveRef.current();},1000);}
       }
     }catch(e){}
   };
@@ -1125,12 +1130,12 @@ export default function App(){
           if(!src)src=canvas.toDataURL("image/jpeg",0.8);
           if(checkTarget){
             const it=checkTarget;const nt=composeNote(it);
-            setCheckPhotos(p=>({...p,[it]:[...(p[it]||[]),{data:src,time:nowTime(),note:nt}]}));
+            setCheckPhotos(p=>({...p,[it]:[...(p[it]||[]),{id:genUUID(),data:src,time:nowTime(),note:nt}]}));
           }else if(albumTarget){
             const at=albumTarget;
             setAlbumPhotos(p=>[...p,{id:genUUID(),phase:at.phase,position:at.position,data:src,time:nowTime()}]);
           }else{
-            setCur(p=>{const ph={...p.photos};const a=ph[photoStep]||[];ph[photoStep]=[...a,{data:src,time:nowTime()}];const ds={...(p.dates||{})};if(!ds[photoStep])ds[photoStep]=today();return{...p,photos:ph,dates:ds,date:p.date||today()};});
+            setCur(p=>{const ph={...p.photos};const a=ph[photoStep]||[];ph[photoStep]=[...a,{id:genUUID(),data:src,time:nowTime()}];const ds={...(p.dates||{})};if(!ds[photoStep])ds[photoStep]=today();return{...p,photos:ph,dates:ds,date:p.date||today()};});
           }
         },"image/jpeg",0.85);
       };
