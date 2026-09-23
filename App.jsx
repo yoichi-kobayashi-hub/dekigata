@@ -80,6 +80,7 @@ function getOD(p,d){return(p==="DCIP"?OD_DCIP:p==="HPPE"?OD_HPPE:{})[d]||0;}
 function getDias(p){return p==="DCIP"?DIAS_DCIP:p==="HPPE"?DIAS_HPPE:[];}
 function calcH0(p,D,d){const od=getOD(p,d);return p==="HPPE"?D+od+100:D+od;}
 const FM={H:{label:"深さ",minus:30,plus:30},B:{label:"幅",minus:50,plus:null},Ba:{label:"舗装幅",minus:25,plus:null},D:{label:"埋設深",minus:30,plus:30},D2:{label:"埋設深②",minus:30,plus:30},ta:{label:"舗装厚",minus:7,plus:null},t0:{label:"基礎砂",minus:30,plus:30},t1:{label:"保護砂",minus:30,plus:30},t2:{label:"発生土",minus:30,plus:30},t3:{label:"発生土",minus:30,plus:30},t4:{label:"発生土",minus:30,plus:30},t5:{label:"路盤",minus:30,plus:30},t6:{label:"路盤",minus:30,plus:30},t7:{label:"路盤",minus:30,plus:30},A:{label:"弁芯距離",minus:null,plus:25},Hs:{label:"シート",minus:30,plus:30},Dm:{label:"マーカー",minus:30,plus:30}};
+const APP_VERSION="1.9.4";
 const PL={DCIP:"DCIP",HPPE:"HPPE",SHIKIRI:"仕切弁筐"};
 const DIM_LABELS=["深さ","幅","厚さ","延長","高さ","径"];
 const ZONE_A=["t1","t2","t3","t4"],ZONE_B=["t5","t6","t7"];
@@ -1138,7 +1139,7 @@ export default function App(){
     const selSimple=(tpl)=>{setHeader(h=>({...h,projectType:"simple",workKind:tpl.name,diameter:""}));setCheckItems(Array.isArray(tpl.items)?tpl.items:[]);};
     const selPublic=()=>{setHeader(h=>({...h,projectType:"public",workKind:"",diameter:h.diameter&&Number(h.diameter)>0?Number(h.diameter):150}));if((checkItems||[]).length===0&&seqTpls[0])setCheckItems(seqTpls[0].items);};
     return(<div style={{...S.w,zoom:fontScale}}>
-    <div style={S.top}><h1 style={S.logo}>出来形かんたん</h1><div style={{display:"flex",alignItems:"center",gap:6}}><span style={S.bg}>{workMode==="simple"?"簡易":"1/3"}</span><button style={{...S.bk,fontSize:20,padding:"4px 8px"}} onClick={()=>setShowProjList(true)} title="プロジェクト一覧">≡</button></div></div>
+    <div style={S.top}><h1 style={S.logo}>出来形かんたん <span style={{fontSize:10,color:"#bbb",fontWeight:500}}>v{APP_VERSION}</span></h1><div style={{display:"flex",alignItems:"center",gap:6}}><span style={S.bg}>{workMode==="simple"?"簡易":"1/3"}</span><button style={{...S.bk,fontSize:20,padding:"4px 8px"}} onClick={()=>setShowProjList(true)} title="プロジェクト一覧">≡</button></div></div>
     <div style={S.c}><div style={S.ch}>工事情報</div>
       {[["projectName","工事名"],["location","工事箇所"]].map(([k,l])=>(<div key={k} style={{marginBottom:8}}><label style={S.lb}>{l}</label><input style={S.inp} value={header[k]||""} onChange={e=>setHeader(h=>({...h,[k]:e.target.value}))} placeholder={l}/></div>))}</div>
     <div style={S.c}><div style={S.ch}>工種を選ぶ</div>
@@ -1191,13 +1192,14 @@ export default function App(){
     {showProjList&&(<div onClick={()=>setShowProjList(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:9999,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:20,paddingTop:60}}>
       <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:12,padding:20,maxWidth:480,width:"100%",maxHeight:"80vh",overflowY:"auto"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-          <h2 style={{fontSize:18,fontWeight:700,margin:0}}>プロジェクト一覧</h2>
+          <h2 style={{fontSize:18,fontWeight:700,margin:0}}>プロジェクト一覧 <span style={{fontSize:11,color:"#999",fontWeight:500}}>v{APP_VERSION}</span></h2>
           <button style={{background:"none",border:"none",fontSize:24,cursor:"pointer",color:"#888",padding:"0 8px"}} onClick={()=>setShowProjList(false)}>×</button>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,padding:"8px 10px",background:"#f5f5f5",borderRadius:8}}>
           <span style={{fontSize:13,fontWeight:600,flex:1}}>文字サイズ</span>
           {[["標準",1.0],["大",1.15],["特大",1.3]].map(([l,z])=>(<button key={l} onClick={()=>setZoom(z)} style={{padding:"6px 12px",borderRadius:14,border:`1.5px solid ${fontScale===z?"#1565C0":"#ccc"}`,background:fontScale===z?"#1565C0":"#fff",color:fontScale===z?"#fff":"#555",fontSize:13,fontWeight:700,cursor:"pointer"}}>{l}</button>))}
         </div>
+        <button style={{...S.exp,marginBottom:10,background:"#f5f5f5",color:"#555",border:"1px solid #ddd"}} onClick={()=>{window.location.reload();}}>🔄 最新版に更新（v{APP_VERSION}）</button>
         <button style={{...S.pri,marginBottom:16}} onClick={newProject}>+ 新規プロジェクト</button>
         {projects.length===0?(<div style={{textAlign:"center",padding:"20px 0",color:"#888",fontSize:13}}>プロジェクトなし</div>):(
           projects.sort((a,b)=>(b.updatedAt||"").localeCompare(a.updatedAt||"")).map(pj=>{
@@ -1584,13 +1586,14 @@ export default function App(){
     {showProjList&&(<div onClick={()=>setShowProjList(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:9999,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:20,paddingTop:60}}>
       <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:12,padding:20,maxWidth:480,width:"100%",maxHeight:"80vh",overflowY:"auto"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-          <h2 style={{fontSize:18,fontWeight:700,margin:0}}>プロジェクト一覧</h2>
+          <h2 style={{fontSize:18,fontWeight:700,margin:0}}>プロジェクト一覧 <span style={{fontSize:11,color:"#999",fontWeight:500}}>v{APP_VERSION}</span></h2>
           <button style={{background:"none",border:"none",fontSize:24,cursor:"pointer",color:"#888",padding:"0 8px"}} onClick={()=>setShowProjList(false)}>×</button>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,padding:"8px 10px",background:"#f5f5f5",borderRadius:8}}>
           <span style={{fontSize:13,fontWeight:600,flex:1}}>文字サイズ</span>
           {[["標準",1.0],["大",1.15],["特大",1.3]].map(([l,z])=>(<button key={l} onClick={()=>setZoom(z)} style={{padding:"6px 12px",borderRadius:14,border:`1.5px solid ${fontScale===z?"#1565C0":"#ccc"}`,background:fontScale===z?"#1565C0":"#fff",color:fontScale===z?"#fff":"#555",fontSize:13,fontWeight:700,cursor:"pointer"}}>{l}</button>))}
         </div>
+        <button style={{...S.exp,marginBottom:10,background:"#f5f5f5",color:"#555",border:"1px solid #ddd"}} onClick={()=>{window.location.reload();}}>🔄 最新版に更新（v{APP_VERSION}）</button>
         <button style={{...S.pri,marginBottom:16}} onClick={newProject}>+ 新規プロジェクト</button>
         {projects.length===0?(<div style={{textAlign:"center",padding:"20px 0",color:"#888",fontSize:13}}>プロジェクトなし</div>):(
           projects.sort((a,b)=>(b.updatedAt||"").localeCompare(a.updatedAt||"")).map(pj=>{
