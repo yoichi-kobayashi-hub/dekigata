@@ -707,7 +707,7 @@ export default function App(){
 
   // チェックリスト画面に入ったらテンプレをSupabaseから取得
   useEffect(()=>{
-    if((screen!=="check"&&screen!=="setup")||tplLoaded)return;
+    if((screen!=="check"&&screen!=="setup"&&screen!=="list")||tplLoaded)return;
     (async()=>{
       try{const rows=await sbFetchTemplates();setTemplates(rows||[]);}catch(e){console.warn("tpl fetch failed",e);}
       setTplLoaded(true);
@@ -1256,6 +1256,7 @@ export default function App(){
               <div style={{fontSize:12,color:"#888",marginTop:4}}>{(Array.isArray(tpl.items)?tpl.items:[]).length}項目：{(Array.isArray(tpl.items)?tpl.items:[]).slice(0,5).join(" / ")}{(tpl.items||[]).length>5?" …":""}</div>
             </button>))
           ))}
+        {header.projectType!=="simple"&&<div style={{fontSize:11,color:"#E65100",marginBottom:6}}>※公共工事は「@」付きの工程テンプレ（配水管布設）を選ぶと測点画面が一本流れになります</div>}
         <button style={{...S.exp,marginTop:4}} onClick={()=>setCheckItems(["着手前","完了"])}>空のリストで開始（項目は自分で追加）</button>
       </>):(<>
         {hasAnchors?(<div style={{...S.c,background:"#E3F2FD",border:"1px solid #90CAF9"}}>
@@ -1391,6 +1392,16 @@ export default function App(){
           <button style={{...S.sm,fontSize:14,fontWeight:700}} onClick={()=>editPoint(idx)}>入力→</button></div></div>);})}
     <div style={{display:"flex",flexDirection:"column",gap:8,marginTop:12}}>
       <button style={{...S.pri,background:"#fff",color:"#1565C0",border:"2px solid #1565C0"}} onClick={()=>setPoints(p=>[...p,{name:`No.${p.length+1}`,date:"",measured:{},photos:{}}])}>+ 測点追加</button>
+      {(()=>{
+        if(hasAnchors||header.projectType==="simple")return null;
+        const seq=(templates||[]).filter(t=>(Array.isArray(t.items)?t.items:[]).some(i=>String(i).trim().startsWith("@")));
+        if(seq.length===0)return null;
+        const hasPhotos=Object.values(checkPhotos||{}).some(a=>Array.isArray(a)&&a.length>0);
+        return(<div style={{...S.c,background:"#FFF8E1",border:"2px solid #FFB300"}}>
+          <div style={{fontSize:14,fontWeight:700,color:"#E65100",marginBottom:4}}>⚠ 状況写真と出来形が別画面になっています</div>
+          <div style={{fontSize:12,color:"#555",marginBottom:8}}>工程テンプレを適用すると、各測点の画面で「状況写真📷 → 出来形📐」が{(seq[0].items||[]).length}項目の一本流れになります。{hasPhotos?"（今のチェックリストの写真は残ります）":""}</div>
+          <button style={S.pri} onClick={()=>{setCheckItems(seq[0].items);setToast(`「${seq[0].name}」を適用 → 測点を開いてください`);setTimeout(()=>setToast(""),3000);}}>一本流れにする（{seq[0].name}）</button>
+        </div>);})()}
       <button style={{...S.exp,background:"#FFF3E0",color:"#E65100",border:"1px solid #FFCC80"}} onClick={()=>setScreen("album")}>📷 着手前及び完成（写真台帳）</button>
       <button style={{...S.exp,background:!hasAnchors&&checkItems.length>0&&checkItems.filter(it=>!((checkPhotos[it]||[]).length>0)).length>0?"#FFEBEE":"#F5F5F5",color:!hasAnchors&&checkItems.length>0&&checkItems.filter(it=>!((checkPhotos[it]||[]).length>0)).length>0?"#C62828":"#555",border:"1px solid #ddd"}} onClick={()=>setScreen("check")}>{hasAnchors?"🗂 工程リスト（状況写真の順序を編集）":`✓ 撮影チェックリスト${checkItems.length>0?(()=>{const r=checkItems.filter(it=>!((checkPhotos[it]||[]).length>0)).length;return r>0?`（未撮影 ${r}件）`:"（完了✅）";})():""}`}</button>
       <button style={S.exp} onClick={handlePDF}>PDF出力（表紙+各工程）</button>
