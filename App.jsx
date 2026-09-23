@@ -8,7 +8,7 @@ const ROADS=[{key:"shidou",label:"市道",D:1000},{key:"kendou",label:"県道",D
 const SURFACES=[{key:"asphalt",label:"アスファルト"},{key:"gravel",label:"砕石"}];
 
 function mkDCIP(road,surface,D){
-  const Hs=D-300;const isG=surface==="gravel";
+  const Hs=300;const isG=surface==="gravel";
   if(road==="shidou"){const s=[
     {id:1,name:"掘削",inputs:["H","B"],tKey:null,prevRef:null,extra:[]},
     {id:2,name:"管布設",inputs:["D"],tKey:null,prevRef:null,extra:[]},
@@ -32,7 +32,7 @@ function mkDCIP(road,surface,D){
   ];if(!isG)s.push({id:10,name:"舗装",inputs:["Ba","ta"],tKey:null,prevRef:null,extra:[]});return s;
 }
 function mkHPPE(road,surface,D){
-  const Hs=D-300;const isG=surface==="gravel";
+  const Hs=300;const isG=surface==="gravel";
   if(road==="shidou"){const s=[
     {id:1,name:"掘削",inputs:["H","B"],tKey:null,prevRef:null,extra:[]},
     {id:2,name:"基礎砂",inputs:["H","B"],tKey:"t0",tDef:100,prevRef:1,extra:[]},
@@ -110,7 +110,10 @@ function nowTime(){return new Date().toLocaleTimeString("ja-JP",{hour:"2-digit",
 // ═══════════════════════════════════════
 // PDF出力（印刷ベース）
 // ═══════════════════════════════════════
-function generatePDF({header,pipeType,roadType,surfaceType,design,points,steps,dia,od,D,H0,pipe2,od2,D2}){
+function generatePDF({header,pipeType,roadType,surfaceType,design,points,steps:allSteps,dia,od,D,H0,pipe2,od2,D2,mode}){
+  mode=mode||"dekigata";
+  const steps=allSteps;
+  const sheetSteps=mode==="status"?allSteps:allSteps.filter(st=>!st.photoOnly);
   const allItems=pipe2?["B","Ba","H","t1","t2","t3","t4","t5","t6","ta","D","D2","Hs","Dm"]:["B","Ba","H","t1","t2","t3","t4","t5","t6","ta","D","Hs","Dm"];
   const lbl=(it)=>pipe2&&it==="D"?"D①":it==="D2"?"D②":it;
   const road=ROADS.find(r=>r.key===roadType);
@@ -164,7 +167,12 @@ td,th{border:0.5px solid #333;padding:3px 5px;font-size:12px;vertical-align:midd
 .step-photo img{width:100%;height:100%;object-fit:cover;display:block}
 .step-mz{border:0.5px solid #ddd;padding:3px;display:flex;align-items:stretch;justify-content:stretch;background:#fafafa;overflow:hidden}
 .step-mz svg{width:100%;height:100%;display:block;flex:1}
-.step-info{font-size:11px;display:flex;flex-direction:column;overflow:hidden}
+.step-info{font-size:12px;display:flex;flex-direction:column;overflow:hidden}
+.step-card.st{grid-template-columns:1.6fr 1fr;grid-template-rows:1fr}
+.bb{border:1px solid #333;padding:4px 6px;font-size:12px;display:flex;flex-direction:column;gap:0;overflow:hidden;background:#fff}
+.bb .bt{font-weight:bold;font-size:13px;border-bottom:1px solid #333;padding-bottom:2px;margin-bottom:3px}
+.bb .br{display:grid;grid-template-columns:52px 1fr;border-bottom:0.4px solid #ccc;padding:2px 0;font-size:12px;line-height:1.3}
+.bb .br .k{color:#555}.bb .br .v{font-weight:bold}
 .step-info table td{font-size:11px;padding:2px 4px}
 .step-info table th{font-size:10px;padding:2px 4px}
 .step-title{font-weight:bold;font-size:12px;margin-bottom:2mm;padding-bottom:1mm;border-bottom:1px solid #ddd}
@@ -172,7 +180,7 @@ td,th{border:0.5px solid #333;padding:3px 5px;font-size:12px;vertical-align:midd
 
   let html=`<html><head><meta charset="utf-8"><title>出来形_${header.projectName||""}</title><style>${css}</style></head><body>`;
 
-  const coverPages=Math.ceil(points.length/2);
+  const coverPages=mode==="status"?0:Math.ceil(points.length/2);
   for(let p=0;p<coverPages;p++){
     const ptL=points[p*2];const ptR=points[p*2+1]||null;
     html+=`<div class="page"><div class="title">検 査 記 録 表</div>`;
@@ -378,16 +386,47 @@ td,th{border:0.5px solid #333;padding:3px 5px;font-size:12px;vertical-align:midd
     return s;
   };
 
+  const designHOf=(step,pt)=>{if(step.id===1)return H0;const bStep=steps.find(s=>s.tKey==="t0");if(bStep&&step.id===bStep.id)return H0-(Number(design.t0)||0);const dmP=measuredD(steps,pt.measured);let hh=dmP!==null?dmP:D;let ap=false;for(const s2 of steps){if(s2.inputs.includes("D")){ap=true;continue;}if(!ap)continue;if(typeof s2.id==="number"&&s2.id>step.id)break;if(s2.tKey&&s2.tKey!=="t0"&&design[s2.tKey])hh-=Number(design[s2.tKey]);}return Math.round(hh);};
+  const boardLines=(step,pt)=>{
+    const L=[];
+    L.push(["工事名",header.projectName||""]);L.push(["測点",pt.name||""]);
+    L.push(["工程",step.photoOnly?step.name:`${step.id}.${step.name}`]);
+    L.push(["管種",pipe2?`${PL[pipeType]}φ${dia}+${PL[pipe2.pipeType||pipeType]}φ${pipe2.diameter}`:`${PL[pipeType]} φ${dia}`]);
+    if(step.photoOnly){const spec=photoSpec(step.name);if(spec){fieldPairs(spec,(k)=>pt.measured[`${step.id}_f_${k}`],(k)=>k==="管径"?(pipe2?`φ${dia}+φ${pipe2.diameter}`:`φ${dia}`):"").forEach(([k,v])=>L.push([k,v]));}}
+    else{
+      const mv=(f)=>{const v=pt.measured[`${step.id}_${f}`];return(v===undefined||v==="")?null:Number(v);};
+      const dl=(lbl,dsg,f)=>{const m=mv(f);if(m!==null&&dsg!==null&&dsg!==""){const j=judge(m-Number(dsg),f)||"";L.push([lbl,`設${dsg} 実${m} ${j}`]);}else L.push([lbl,`設計${dsg!==null&&dsg!==""?dsg:"—"}`]);};
+      if(step.inputs.includes("H"))dl("H",designHOf(step,pt),"H");
+      if(step.inputs.includes("B")&&mv("B")!==null)dl("B",design.B||"","B");
+      if(step.inputs.includes("D"))dl(pipe2?"D①":"D",D,"D");
+      if(step.inputs.includes("D2"))dl("D②",D2,"D2");
+      if(step.inputs.includes("D")&&pt.measured[`${step.id}_f_トルク`]){const tv=pt.measured[`${step.id}_f_トルク`];L.push(tv==="直管"?["継手","直管(トルク無)"]:["トルク",tv]);}
+      if(step.inputs.includes("Ba"))dl("Ba",design.Ba||"","Ba");
+      if(step.inputs.includes("ta"))dl("ta",Number(design.ta)||40,"ta");
+      if(step.tKey&&design[step.tKey]){const tD=Number(design[step.tKey]);const tM=calcTm(step,steps,pt.measured);if(tM!==null){const j=judge(tM-tD,step.tKey)||"";L.push([step.tKey,`設${tD} 実${Math.round(tM)} ${j}`]);}else L.push([step.tKey,`設計${tD}`]);}
+      (step.extra||[]).forEach(ex=>{const m=autoExtra(ex,step,steps,pt.measured);if(m!==null){const j=judge(m-ex.design,ex.key,ex)||"";L.push([ex.key,`設${ex.design} 実${m} ${j}`]);}});
+    }
+    L.push(["日付",((pt.dates||{})[step.id])||pt.date||""]);
+    L.push(["会社","(有)信濃住宅設備"]);
+    return L;
+  };
   const perPage=3;
   points.forEach(pt=>{
-    for(let sIdx=0;sIdx<steps.length;sIdx+=perPage){
-      html+=`<div class="step-page"><div class="step-hdr"><span>${pt.name} — 工程写真</span><span style="font-size:10px;color:#888">${PL[pipeType]} φ${dia} ${road.label}　${pt.date||""}</span></div>`;
-      for(let i=0;i<perPage&&sIdx+i<steps.length;i++){
-        const step=steps[sIdx+i];
+    for(let sIdx=0;sIdx<sheetSteps.length;sIdx+=perPage){
+      html+=`<div class="step-page"><div class="step-hdr"><span>${pt.name} — ${mode==="status"?"施工状況写真":"出来形管理写真"}</span><span style="font-size:10px;color:#888">${PL[pipeType]} φ${dia} ${road.label}　${pt.date||""}</span></div>`;
+      for(let i=0;i<perPage&&sIdx+i<sheetSteps.length;i++){
+        const step=sheetSteps[sIdx+i];
         const stepPhotos=(pt.photos&&pt.photos[step.id])||[];
         const photoContent=stepPhotos.length>0
           ?`<img src="${stepPhotos[0].data}" alt="${pt.name} ${step.name}"/>`
           :`<span>写真未撮影（${pt.name} ${step.name}）</span>`;
+        if(mode==="status"){
+          const L=boardLines(step,pt);
+          html+=`<div class="step-card st"><div class="step-photo">${photoContent}</div><div class="bb"><div class="bt">${sIdx+i+1}/${sheetSteps.length}　${step.photoOnly?step.name:`${step.id}. ${step.name}`}</div>`;
+          L.forEach(([k,v])=>{html+=`<div class="br"><span class="k">${k}</span><span class="v">${v}</span></div>`;});
+          html+=`</div></div>`;
+          continue;
+        }
         if(step.photoOnly){
           html+=`<div class="step-card"><div class="step-photo">${photoContent}</div><div class="step-mz">${mkStepMz(step,pt)}</div><div class="step-info">`;
           html+=`<div class="step-title">${step.name}</div>`;
@@ -402,7 +441,7 @@ td,th{border:0.5px solid #333;padding:3px 5px;font-size:12px;vertical-align:midd
         html+=`<table><tr><th>項目</th><th>設計</th><th>実測</th><th>判定</th></tr>`;
         step.inputs.forEach(f=>{
           let dVal=null;
-          if(f==="H"){const dmP=measuredD(steps,pt.measured);let hh=dmP!==null?dmP:D;let ap=false;for(const s2 of steps){if(s2.inputs.includes("D")){ap=true;continue;}if(!ap)continue;if(typeof s2.id==="number"&&s2.id>step.id)break;if(s2.tKey&&s2.tKey!=="t0"&&design[s2.tKey])hh-=Number(design[s2.tKey]);}dVal=step.id===1?H0:Math.round(hh);}
+          if(f==="H"){dVal=designHOf(step,pt);}
           else if(f==="B")dVal=design.B?Number(design.B):null;
           else if(f==="Ba")dVal=design.Ba?Number(design.Ba):null;
           else if(f==="D")dVal=D;
@@ -542,6 +581,50 @@ async function sbUpsertProject(id,name,data){
   });
   return res.ok;
 }
+async function sbFetchProject(id){
+  const res=await fetch(`${SB_URL}/rest/v1/dekigata_projects?id=eq.${id}&select=*`,{headers:sbHeaders});
+  if(!res.ok)throw new Error("fetch failed");
+  const rows=await res.json();return rows[0]||null;
+}
+// 条件付き更新: 読み込んだ時点のupdated_atと一致する時だけ書く（他端末が書いていたら書かない）
+async function sbConditionalUpdate(id,name,data,baseUpdatedAt){
+  const res=await fetch(`${SB_URL}/rest/v1/dekigata_projects?id=eq.${id}&updated_at=eq.${encodeURIComponent(baseUpdatedAt)}`,{
+    method:"PATCH",headers:{...sbHeaders,"Prefer":"return=representation"},
+    body:JSON.stringify({name,data,updated_at:new Date().toISOString()})});
+  if(!res.ok)throw new Error("patch failed");
+  const rows=await res.json();
+  return rows.length>0?{ok:true,row:rows[0]}:{conflict:true};
+}
+async function sbInsertProject(id,name,data){
+  const res=await fetch(`${SB_URL}/rest/v1/dekigata_projects`,{
+    method:"POST",headers:{...sbHeaders,"Prefer":"return=representation"},
+    body:JSON.stringify({id,name,data,updated_at:new Date().toISOString()})});
+  if(res.status===409)return{conflict:true};
+  if(!res.ok)throw new Error("insert failed");
+  const rows=await res.json();return{ok:true,row:rows[0]};
+}
+// 3wayマージ: 自分がbase（読んだ時点）から変えた項目だけをcloudに重ねる。写真は両方残す
+function mergeProjectData(local,cloud,base){
+  const b=base||{};const l=local||{};const c=cloud||{};
+  const same=(a,bb)=>JSON.stringify(a===undefined?null:a)===JSON.stringify(bb===undefined?null:bb);
+  const pick=(lv,cv,bv)=>same(lv,bv)?cv:lv;
+  const mergeObj=(lo,co,bo)=>{lo=lo||{};co=co||{};bo=bo||{};const out={...co};new Set([...Object.keys(lo),...Object.keys(bo)]).forEach(k=>{if(!same(lo[k],bo[k])){if(lo[k]===undefined)delete out[k];else out[k]=lo[k];}});return out;};
+  const unionPhotos=(la,ca)=>{la=Array.isArray(la)?la:[];ca=Array.isArray(ca)?ca:[];const seen=new Set();const out=[];[...ca,...la].forEach(ph=>{const k=ph&&(ph.id||ph.data);if(!k||seen.has(k))return;seen.add(k);out.push(ph);});return out;};
+  const mergePhotoMap=(lm,cm)=>{lm=lm||{};cm=cm||{};const out={...cm};Object.keys(lm).forEach(k=>{out[k]=unionPhotos(lm[k],cm[k]);});return out;};
+  const mergePoint=(lp,cp,bp)=>{if(!cp)return lp;if(!lp)return cp;const bb=bp||{};return{...cp,name:pick(lp.name,cp.name,bb.name),date:pick(lp.date,cp.date,bb.date),measured:mergeObj(lp.measured,cp.measured,bb.measured),dates:mergeObj(lp.dates,cp.dates,bb.dates),photos:mergePhotoMap(lp.photos,cp.photos)};};
+  const lps=l.points||[],cps=c.points||[],bps=b.points||[];
+  const byName=(arr)=>{const m={};arr.forEach(pt=>{if(pt&&pt.name)m[pt.name]=pt;});return m;};
+  const cm=byName(cps),bm=byName(bps),lm=byName(lps);
+  const outPoints=lps.map(lp=>mergePoint(lp,cm[lp.name],bm[lp.name]));
+  cps.forEach(cp=>{if(!lm[cp.name]&&!bm[cp.name])outPoints.push(cp);});
+  return{
+    pipeType:pick(l.pipeType,c.pipeType,b.pipeType),roadType:pick(l.roadType,c.roadType,b.roadType),surfaceType:pick(l.surfaceType,c.surfaceType,b.surfaceType),
+    header:mergeObj(l.header,c.header,b.header),design:mergeObj(l.design,c.design,b.design),points:outPoints,
+    albumPhotos:unionPhotos(l.albumPhotos,c.albumPhotos),albumPositions:pick(l.albumPositions,c.albumPositions,b.albumPositions),
+    checkItems:pick(l.checkItems,c.checkItems,b.checkItems),checkPhotos:mergePhotoMap(l.checkPhotos,c.checkPhotos),
+    checkNotes:mergeObj(l.checkNotes,c.checkNotes,b.checkNotes),checkDims:mergeObj(l.checkDims,c.checkDims,b.checkDims),
+  };
+}
 async function sbDeleteProject(id){
   const res=await fetch(`${SB_URL}/rest/v1/dekigata_projects?id=eq.${id}`,{method:"DELETE",headers:sbHeaders});
   return res.ok;
@@ -607,6 +690,22 @@ export default function App(){
   const[syncStatus,setSyncStatus]=useState("init");
   const syncTimer=useRef(null);
   const projToData=(p)=>{const{id,updatedAt,...rest}=p;return rest;};
+  const snapRef=useRef({updatedAt:null,data:null});
+  const dirtyRef=useRef(false);
+  const lastAppliedRef=useRef(null);
+  const stateRef=useRef({});
+  const normData=(d)=>{d=d||{};return{pipeType:d.pipeType||"DCIP",roadType:d.roadType||"shidou",surfaceType:d.surfaceType||"asphalt",header:d.header||{projectName:"",location:"",diameter:150},design:d.design||{},points:d.points||[],albumPhotos:d.albumPhotos||[],albumPositions:(d.albumPositions&&d.albumPositions.length)?d.albumPositions:["始点","中間点","終点"],checkItems:d.checkItems||[],checkPhotos:d.checkPhotos||{},checkNotes:d.checkNotes||{},checkDims:d.checkDims||{}};};
+  const applyData=(d)=>{
+    const n=normData(d);
+    setPipeType(n.pipeType);setRoadType(n.roadType);setSurfaceType(n.surfaceType);
+    setHeader(n.header);setDesign(n.design);setPoints(n.points);
+    setAlbumPhotos(n.albumPhotos);setAlbumPositions(n.albumPositions);
+    setCheckItems(n.checkItems);setCheckPhotos(n.checkPhotos);setCheckNotes(n.checkNotes);setCheckDims(n.checkDims);
+    lastAppliedRef.current=JSON.stringify(n);stateRef.current=n;
+    return n;
+  };
+  const resetSync=()=>{snapRef.current={updatedAt:null,data:null};lastAppliedRef.current=null;dirtyRef.current=false;};
+  const mirrorLocal=(id,d,updatedAt,dirty)=>{setProjects(prev=>{const idx=prev.findIndex(p=>p.id===id);const rec={id,...d,updatedAt:updatedAt||new Date().toISOString(),localDirty:!!dirty};let next;if(idx<0)next=[...prev,rec];else{next=[...prev];next[idx]=rec;}try{localStorage.setItem("dekigata_projects",JSON.stringify(next));}catch(e){}return next;});};
 
   // 起動時: Supabase優先で読み込み、オフライン時はlocalStorage
   useEffect(()=>{
@@ -620,6 +719,10 @@ export default function App(){
       let local=[];
       try{const raw=localStorage.getItem("dekigata_projects");if(raw)local=JSON.parse(raw);}catch(e){}
       if(cloudOk){
+        // 圏外で編集済み(localDirty)のプロジェクトはローカル版を優先（開いた時にクラウドとマージ保存される）
+        for(const lp of local){
+          if(lp.localDirty){const ci=cloudProjects.findIndex(c=>c.id===lp.id);if(ci>=0){cloudProjects[ci]={...lp};}}
+        }
         // ローカルのみのプロジェクトをクラウドへ移行
         for(const lp of local){
           const exists=cloudProjects.find(c=>c.id===lp.id);
@@ -648,45 +751,89 @@ export default function App(){
     if(!loaded||!currentProjId)return;
     const pj=projects.find(p=>p.id===currentProjId);
     if(pj){
-      setPipeType(pj.pipeType||"DCIP");
-      setRoadType(pj.roadType||"shidou");
-      setSurfaceType(pj.surfaceType||"asphalt");
-      setHeader(pj.header||{projectName:"",location:"",diameter:150});
-      setDesign(pj.design||{});
-      setPoints(pj.points||[]);
-      setAlbumPhotos(pj.albumPhotos||[]);
-      setAlbumPositions(pj.albumPositions&&pj.albumPositions.length?pj.albumPositions:["始点","中間点","終点"]);
-      setCheckItems(pj.checkItems||[]);
-      setCheckPhotos(pj.checkPhotos||{});
-      setCheckNotes(pj.checkNotes||{});
-      setCheckDims(pj.checkDims||{});
+      const{localDirty,...rest}=pj;const d=projToData(rest);
+      const n=applyData(d);
+      if(localDirty){snapRef.current={updatedAt:null,data:null};dirtyRef.current=true;setTimeout(()=>{if(syncSaveRef.current)syncSaveRef.current();},1500);}
+      else{snapRef.current={updatedAt:pj.updatedAt||null,data:n};dirtyRef.current=false;}
       setInited(true);
     }
   // eslint-disable-next-line
   },[currentProjId,loaded]);
 
-  // 自動保存: ローカル即時 + クラウドへ2秒debounce同期
+  // 現在の状態を常にrefに（保存処理が最新値を読むため）
+  stateRef.current={pipeType,roadType,surfaceType,header,design,points,albumPhotos,albumPositions,checkItems,checkPhotos,checkNotes,checkDims};
+
+  // クラウド保存: 条件付き更新 → 衝突したら取得→3wayマージ→再試行（他端末の入力を消さない）
+  const savingRef=useRef(false);const rerunRef=useRef(false);
+  const syncSave=async()=>{
+    const id=currentProjId;if(!id)return;
+    if(savingRef.current){rerunRef.current=true;return;}
+    savingRef.current=true;
+    try{await syncSaveCore(id);}finally{savingRef.current=false;if(rerunRef.current){rerunRef.current=false;setTimeout(()=>{if(syncSaveRef.current)syncSaveRef.current();},300);}}
+  };
+  const syncSaveCore=async(id)=>{
+    try{
+      let local=stateRef.current;let snap=snapRef.current;
+      for(let attempt=0;attempt<3;attempt++){
+        const name=(local.header&&local.header.projectName)||"";
+        let r;
+        if(snap.updatedAt)r=await sbConditionalUpdate(id,name,local,snap.updatedAt);
+        else r=await sbInsertProject(id,name,local);
+        if(r.ok){snapRef.current={updatedAt:r.row.updated_at,data:local};dirtyRef.current=false;lastAppliedRef.current=JSON.stringify(normData(local));mirrorLocal(id,local,r.row.updated_at,false);setSyncStatus("synced");return;}
+        // 衝突: クラウドの最新を取ってマージ
+        const cloudRow=await sbFetchProject(id);
+        if(!cloudRow){const ins=await sbInsertProject(id,name,local);if(ins.ok){snapRef.current={updatedAt:ins.row.updated_at,data:local};dirtyRef.current=false;lastAppliedRef.current=JSON.stringify(normData(local));mirrorLocal(id,local,ins.row.updated_at,false);setSyncStatus("synced");return;}continue;}
+        const merged=mergeProjectData(local,cloudRow.data||{},snap.data||{});
+        applyData(merged);
+        snapRef.current={updatedAt:cloudRow.updated_at,data:cloudRow.data||{}};
+        local=merged;snap=snapRef.current;stateRef.current=merged;
+        setToast("他端末の更新と統合しました");setTimeout(()=>setToast(""),3000);
+      }
+      setSyncStatus("offline");
+    }catch(e){console.warn("sync err",e);setSyncStatus("offline");}
+  };
+  const syncSaveRef=useRef(null);syncSaveRef.current=syncSave;
+
+  // 自動保存: 状態変化 → ローカル即時 + 2秒後にクラウド（条件付き）
   useEffect(()=>{
     if(!loaded||!inited||!currentProjId)return;
-    const save={id:currentProjId,pipeType,roadType,surfaceType,header,design,points,albumPhotos,albumPositions,checkItems,checkPhotos,checkNotes,checkDims,updatedAt:new Date().toISOString()};
-    setProjects(prev=>{
-      const idx=prev.findIndex(p=>p.id===currentProjId);
-      let next;
-      if(idx<0)next=[...prev,save];
-      else{next=[...prev];next[idx]=save;}
-      try{localStorage.setItem("dekigata_projects",JSON.stringify(next));}catch(e){console.warn("save err",e);}
-      return next;
-    });
+    if(lastAppliedRef.current!==null&&JSON.stringify(stateRef.current)===lastAppliedRef.current)return;
+    dirtyRef.current=true;
+    mirrorLocal(currentProjId,stateRef.current,null,true);
     setSyncStatus("syncing");
     if(syncTimer.current)clearTimeout(syncTimer.current);
-    syncTimer.current=setTimeout(async()=>{
-      try{
-        const ok=await sbUpsertProject(currentProjId,header.projectName||"",{pipeType,roadType,surfaceType,header,design,points,albumPhotos,albumPositions,checkItems,checkPhotos,checkNotes,checkDims});
-        setSyncStatus(ok?"synced":"offline");
-      }catch(e){setSyncStatus("offline");}
-    },2000);
+    syncTimer.current=setTimeout(()=>{if(syncSaveRef.current)syncSaveRef.current();},2000);
   // eslint-disable-next-line
   },[header,design,points,albumPhotos,albumPositions,checkItems,checkPhotos,checkNotes,checkDims,pipeType,roadType,surfaceType,loaded,inited,currentProjId]);
+
+  // 前面復帰・一覧に戻った時・回線復帰: クラウドの最新を取り込む（未保存があればマージ）
+  const refreshRef=useRef(null);
+  refreshRef.current=async()=>{
+    if(!loaded||!currentProjId||screen==="entry")return;
+    try{
+      const row=await sbFetchProject(currentProjId);
+      if(!row)return;
+      if(row.updated_at===snapRef.current.updatedAt){if(dirtyRef.current&&syncSaveRef.current)syncSaveRef.current();return;}
+      if(dirtyRef.current){
+        const merged=mergeProjectData(stateRef.current,row.data||{},snapRef.current.data||{});
+        applyData(merged);
+        snapRef.current={updatedAt:row.updated_at,data:row.data||{}};
+        if(syncSaveRef.current)syncSaveRef.current();
+      }else{
+        applyData(row.data||{});
+        snapRef.current={updatedAt:row.updated_at,data:row.data||{}};
+        mirrorLocal(currentProjId,row.data||{},row.updated_at,false);
+        setSyncStatus("synced");setToast("他端末の更新を取り込みました");setTimeout(()=>setToast(""),2500);
+      }
+    }catch(e){}
+  };
+  useEffect(()=>{
+    const onVis=()=>{if(document.visibilityState==="visible"&&refreshRef.current)refreshRef.current();};
+    const onOnline=()=>{if(dirtyRef.current&&syncSaveRef.current)syncSaveRef.current();else if(refreshRef.current)refreshRef.current();};
+    document.addEventListener("visibilitychange",onVis);window.addEventListener("focus",onVis);window.addEventListener("online",onOnline);
+    return()=>{document.removeEventListener("visibilitychange",onVis);window.removeEventListener("focus",onVis);window.removeEventListener("online",onOnline);};
+  },[]);
+  useEffect(()=>{if(screen==="list"&&refreshRef.current)refreshRef.current();},[screen]);
 
   // 初期プロジェクト作成 or 既存ロード
   useEffect(()=>{
@@ -716,6 +863,7 @@ export default function App(){
   },[screen,tplLoaded]);
 
   const newProject=()=>{
+    resetSync();
     const id=genUUID();
     setCurrentProjId(id);localStorage.setItem("dekigata_currentId",id);
     setPipeType("DCIP");setRoadType("shidou");setSurfaceType("asphalt");
@@ -725,6 +873,7 @@ export default function App(){
     setToast("新規プロジェクト作成");setTimeout(()=>setToast(""),2000);
   };
   const switchProject=(id)=>{
+    resetSync();
     setCurrentProjId(id);localStorage.setItem("dekigata_currentId",id);
     setShowProjList(false);setScreen("setup");
     setToast("プロジェクト切替");setTimeout(()=>setToast(""),2000);
@@ -737,7 +886,7 @@ export default function App(){
       try{localStorage.setItem("dekigata_projects",JSON.stringify(next));}catch(e){}
       if(id===currentProjId){
         if(next.length>0){setCurrentProjId(next[0].id);localStorage.setItem("dekigata_currentId",next[0].id);}
-        else{const nid=genUUID();setCurrentProjId(nid);localStorage.setItem("dekigata_currentId",nid);setHeader({projectName:"",location:"",diameter:150,projectType:""});setDesign({});setPoints([]);setAlbumPhotos([]);setAlbumPositions(["始点","中間点","終点"]);setCheckItems([]);setCheckPhotos({});setCheckNotes({});setCheckDims({});setInited(false);}
+        else{resetSync();const nid=genUUID();setCurrentProjId(nid);localStorage.setItem("dekigata_currentId",nid);setHeader({projectName:"",location:"",diameter:150,projectType:""});setDesign({});setPoints([]);setAlbumPhotos([]);setAlbumPositions(["始点","中間点","終点"]);setCheckItems([]);setCheckPhotos({});setCheckNotes({});setCheckDims({});setInited(false);}
       }
       return next;
     });
@@ -962,8 +1111,12 @@ export default function App(){
   const totalPhotos=(pt)=>{if(!pt.photos)return 0;return Object.values(pt.photos).reduce((s,a)=>s+a.length,0);};
 
   const handlePDF=()=>{
-    generatePDF({header,pipeType,roadType,surfaceType,design,points,steps:mergedSteps,dia,od,D,H0,pipe2,od2,D2});
-    setToast("PDF出力完了");setTimeout(()=>setToast(""),3000);
+    generatePDF({header,pipeType,roadType,surfaceType,design,points,steps:mergedSteps,dia,od,D,H0,pipe2,od2,D2,mode:"dekigata"});
+    setToast("出来形PDF出力");setTimeout(()=>setToast(""),3000);
+  };
+  const handleStatusPDF=()=>{
+    generatePDF({header,pipeType,roadType,surfaceType,design,points,steps:mergedSteps,dia,od,D,H0,pipe2,od2,D2,mode:"status"});
+    setToast("施工状況写真PDF出力");setTimeout(()=>setToast(""),3000);
   };
 
   const crit=(f,m)=>{const meta=m||FM[f];if(!meta)return"";let p=[];if(meta.minus!==null)p.push(`-${meta.minus}`);if(meta.plus!==null)p.push(`+${meta.plus}`);return p.join("/");};
@@ -1130,17 +1283,25 @@ export default function App(){
       <div style={{flex:1}}><label style={S.lb}>日付（既定・工程ごとに📅で上書き可）</label><input type="date" style={S.inp} value={cur.date||""} onChange={e=>setCur(p=>({...p,date:e.target.value}))}/></div></div></div>
     {mergedSteps.map((step,stepIdx)=>{
       const photos=(cur.photos&&cur.photos[step.id])||[];
-      const seqBadge=(<span style={{fontSize:11,color:"#999",fontWeight:600,flexShrink:0}}>{stepIdx+1}/{mergedSteps.length}</span>);
+      const seqBadge=(<span style={{fontSize:12,color:"#777",fontWeight:700,flexShrink:0,background:"#eee",borderRadius:6,padding:"2px 6px"}}>{stepIdx+1}/{mergedSteps.length}</span>);
+      const isNext=stepIdx===firstOpen;
+      const dSt=doneState(step);
+      const statusTag=dSt==="done"?(<span style={{fontSize:12,fontWeight:700,color:"#2E7D32",background:"#E8F5E9",borderRadius:10,padding:"2px 8px",flexShrink:0}}>✅ 完了</span>)
+        :isNext?(<span style={{fontSize:12,fontWeight:700,color:"#fff",background:"#1565C0",borderRadius:10,padding:"2px 8px",flexShrink:0}}>▶ 次はここ</span>)
+        :dSt==="partial"?(<span style={{fontSize:12,fontWeight:700,color:"#E65100",background:"#FFF3E0",borderRadius:10,padding:"2px 8px",flexShrink:0}}>⏳ 途中</span>):null;
+      const cardFrame=isNext?{border:"2.5px solid #1565C0",boxShadow:"0 0 0 3px #E3F2FD"}:{};
+      const bigCam=(done)=>(<button onClick={()=>takePhoto(step.id)} style={{width:"100%",marginTop:10,padding:"14px",fontSize:17,fontWeight:700,borderRadius:12,border:done?"2px solid #A5D6A7":"none",background:done?"#fff":"#1565C0",color:done?"#2E7D32":"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>{done?`📷 追加で撮る（${photos.length}枚 撮影済）`:"📷 撮影する"}</button>);
       if(step.photoOnly){
         const done=photos.length>0;
-        return(<div key={step.id} id={`stepcard-${stepIdx}`} style={{...S.c,padding:"10px 14px",background:done?"#F1F8E9":"#FAFAF5",borderLeft:`4px solid ${done?"#2E7D32":"#FFB74D"}`,scrollMarginTop:90}}>
+        return(<div key={step.id} id={`stepcard-${stepIdx}`} style={{...S.c,padding:"12px 14px",background:done?"#F1F8E9":isNext?"#F5F9FF":"#FAFAF5",borderLeft:`5px solid ${done?"#2E7D32":isNext?"#1565C0":"#FFB74D"}`,scrollMarginTop:90,...cardFrame}}>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
             {seqBadge}
-            <span style={{fontSize:18,width:24,textAlign:"center"}}>{done?"✅":"📷"}</span>
-            <span style={{fontSize:13,fontWeight:600,flex:1,color:done?"#2E7D32":"#333"}}>{step.name}<span style={{fontSize:12,color:"#999",marginLeft:6}}>状況写真</span></span>
+            <span style={{fontSize:15,fontWeight:700,flex:1,color:done?"#2E7D32":"#222"}}>{step.name}<span style={{fontSize:12,color:"#999",marginLeft:6,fontWeight:500}}>状況写真</span></span>
+            {statusTag}
             {(()=>{const sd=(cur.dates||{})[step.id]||"";return(<label style={{display:"flex",alignItems:"center",gap:2,fontSize:12,color:sd?"#1565C0":"#999",flexShrink:0}}>📅<input type="date" value={sd||cur.date||""} onChange={e=>setCur(p=>({...p,dates:{...(p.dates||{}),[step.id]:e.target.value}}))} style={{border:"none",background:"transparent",fontSize:12,color:"inherit",padding:0,width:112}}/></label>);})()}
-            <button onClick={()=>takePhoto(step.id)} style={S.camBtn}>📷{done?` ${photos.length}`:""}</button></div>
+            </div>
           {(()=>{const spec=photoSpec(step.name);if(!spec||spec.length===0)return null;return renderFields(spec,(k)=>cur.measured[`${step.id}_f_${k}`]||"",(k,v)=>setCur(p=>({...p,measured:{...p.measured,[`${step.id}_f_${k}`]:v}})));})()}
+          {bigCam(done)}
           {done&&(<div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
             {photos.map((ph,pi)=>(<div key={pi} style={{position:"relative"}}>
               <img src={ph.data} onClick={()=>setViewPhoto(ph.data)} style={{width:56,height:56,objectFit:"cover",borderRadius:8,border:"1px solid #ddd",cursor:"pointer"}}/>
@@ -1171,13 +1332,14 @@ export default function App(){
         const need=zk==="A"?steps.filter(s2=>zoneOf(s2)==="B").reduce((a,s2)=>a+(Number(design[s2.tKey])||0),0)+taNeed:taNeed;
         return{zk,isLast,remainLayers,cum,hM,need};
       })();
-      const dState=doneState(step);
-      return(<div key={step.id} id={`stepcard-${stepIdx}`} style={{...S.c,borderLeft:`4px solid ${stCol(dState)}`,scrollMarginTop:90}}>
+      const dState=dSt;
+      return(<div key={step.id} id={`stepcard-${stepIdx}`} style={{...S.c,borderLeft:`5px solid ${isNext?"#1565C0":stCol(dState)}`,background:dState==="done"?"#F1F8E9":isNext?"#F5F9FF":S.c.background,scrollMarginTop:90,...cardFrame}}>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
           {seqBadge}
-          <span style={S.sn}>{step.id}</span><span style={{fontSize:15,fontWeight:700,flex:1}}>{step.name}{dState==="done"&&<span style={{fontSize:12,color:"#2E7D32",marginLeft:6}}>✅</span>}{dState==="partial"&&<span style={{fontSize:11,color:"#F9A825",marginLeft:6}}>{((cur.photos&&cur.photos[step.id])||[]).length>0?"数値未入力":"写真未撮影"}</span>}</span>
+          <span style={S.sn}>{step.id}</span><span style={{fontSize:15,fontWeight:700,flex:1}}>{step.name}<span style={{fontSize:12,color:"#999",marginLeft:6,fontWeight:500}}>出来形</span>{dState==="partial"&&<span style={{fontSize:12,color:"#E65100",marginLeft:6}}>{photos.length>0?"（数値未入力）":"（写真未撮影）"}</span>}</span>
+          {statusTag}
           {(()=>{const sd=(cur.dates||{})[step.id]||"";return(<label style={{display:"flex",alignItems:"center",gap:2,fontSize:12,color:sd?"#1565C0":"#999",flexShrink:0}}>📅<input type="date" value={sd||cur.date||""} onChange={e=>setCur(p=>({...p,dates:{...(p.dates||{}),[step.id]:e.target.value}}))} style={{border:"none",background:"transparent",fontSize:12,color:"inherit",padding:0,width:112}}/></label>);})()}
-          <button onClick={()=>takePhoto(step.id)} style={S.camBtn}>📷{photos.length>0?` ${photos.length}`:""}</button></div>
+          </div>
         {step.inputs.map(f=>{
           const d=dv(f,step.id);const key=`${step.id}_${f}`;const mv=cur.measured[key]??"";
           const err=d!==null&&mv!==""?Number(mv)-Number(d):null;const j=err!==null?judge(err,f):null;
@@ -1215,6 +1377,7 @@ export default function App(){
             <div style={{width:90,textAlign:"center",fontSize:16,fontWeight:700,color:av!==null?"#1565C0":"#ccc"}}>{av!==null?`${av}`:"—"}</div> 
             <div style={{width:48,textAlign:"center",fontSize:14,fontWeight:700,color:err!==null?j==="×"?"#C62828":"inherit":"#ccc"}}>{err!==null?(err>0?`+${err}`:err):"—"}</div>
             <div style={{width:28,textAlign:"center",fontSize:18,fontWeight:800,color:j==="○"?"#2E7D32":j==="×"?"#C62828":"#ddd"}}>{j??"·"}</div></div>);})}
+        {bigCam(photos.length>0)}
         {photos.length>0&&(<div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
           {photos.map((ph,pi)=>(<div key={pi} style={{position:"relative"}}>
             <img src={ph.data} onClick={()=>setViewPhoto(ph.data)} style={{width:64,height:64,objectFit:"cover",borderRadius:8,border:"1px solid #ddd",cursor:"pointer"}}/>
@@ -1407,7 +1570,8 @@ export default function App(){
         </div>);})()}
       <button style={{...S.exp,background:"#FFF3E0",color:"#E65100",border:"1px solid #FFCC80"}} onClick={()=>setScreen("album")}>📷 着手前及び完成（写真台帳）</button>
       <button style={{...S.exp,background:!hasAnchors&&checkItems.length>0&&checkItems.filter(it=>!((checkPhotos[it]||[]).length>0)).length>0?"#FFEBEE":"#F5F5F5",color:!hasAnchors&&checkItems.length>0&&checkItems.filter(it=>!((checkPhotos[it]||[]).length>0)).length>0?"#C62828":"#555",border:"1px solid #ddd"}} onClick={()=>setScreen("check")}>{hasAnchors?"🗂 工程リスト（状況写真の順序を編集）":`✓ 撮影チェックリスト${checkItems.length>0?(()=>{const r=checkItems.filter(it=>!((checkPhotos[it]||[]).length>0)).length;return r>0?`（未撮影 ${r}件）`:"（完了✅）";})():""}`}</button>
-      <button style={S.exp} onClick={handlePDF}>PDF出力（表紙+各工程）</button>
+      <button style={S.exp} onClick={handlePDF}>出来形PDF（検査記録表＋各測点{steps.length}枚・豆図付き）</button>
+      <button style={{...S.exp,background:"#E3F2FD",color:"#1565C0",border:"1px solid #90CAF9"}} onClick={handleStatusPDF}>施工状況写真PDF（各測点{mergedSteps.length}枚・黒板欄付き）</button>
       <button style={{...S.exp,background:"#E3F2FD",color:"#1565C0",border:"1px solid #90CAF9"}} onClick={()=>{
         let csv="\uFEFF";csv+=`工事名,${header.projectName}\n\n`;csv+=`測点,工程,項目,設計,実測,誤差,判定,日付\n`;
         points.forEach(pt=>{steps.forEach(step=>{step.inputs.forEach(f=>{const d=dv(f,step.id);const key=`${step.id}_${f}`;const mv=pt.measured[key]??"";const err=d!==null&&mv!==""?Number(mv)-Number(d):"";const j=err!==""?judge(err,f):"";
