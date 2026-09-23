@@ -80,7 +80,7 @@ function getOD(p,d){return(p==="DCIP"?OD_DCIP:p==="HPPE"?OD_HPPE:{})[d]||0;}
 function getDias(p){return p==="DCIP"?DIAS_DCIP:p==="HPPE"?DIAS_HPPE:[];}
 function calcH0(p,D,d){const od=getOD(p,d);return p==="HPPE"?D+od+100:D+od;}
 const FM={H:{label:"深さ",minus:30,plus:30},B:{label:"幅",minus:50,plus:null},Ba:{label:"舗装幅",minus:25,plus:null},D:{label:"埋設深",minus:30,plus:30},D2:{label:"埋設深②",minus:30,plus:30},ta:{label:"舗装厚",minus:7,plus:null},t0:{label:"基礎砂",minus:30,plus:30},t1:{label:"保護砂",minus:30,plus:30},t2:{label:"発生土",minus:30,plus:30},t3:{label:"発生土",minus:30,plus:30},t4:{label:"発生土",minus:30,plus:30},t5:{label:"路盤",minus:30,plus:30},t6:{label:"路盤",minus:30,plus:30},t7:{label:"路盤",minus:30,plus:30},A:{label:"弁芯距離",minus:null,plus:25},Hs:{label:"シート",minus:30,plus:30},Dm:{label:"マーカー",minus:30,plus:30}};
-const APP_VERSION="1.9.5";
+const APP_VERSION="1.9.4";
 const PL={DCIP:"DCIP",HPPE:"HPPE",SHIKIRI:"仕切弁筐"};
 const DIM_LABELS=["深さ","幅","厚さ","延長","高さ","径"];
 const ZONE_A=["t1","t2","t3","t4"],ZONE_B=["t5","t6","t7"];
@@ -589,7 +589,7 @@ async function sbFetchProject(id){
 }
 // 条件付き更新: 読み込んだ時点のupdated_atと一致する時だけ書く（他端末が書いていたら書かない）
 async function sbConditionalUpdate(id,name,data,baseUpdatedAt){
-  const res=await fetch(`${SB_URL}/rest/v1/dekigata_projects?id=eq.${id}&updated_at=eq.${encodeURIComponent(baseUpdatedAt)}`,{
+  const res=await fetch(`${SB_URL}/rest/v1/dekigata_projects?id=eq.${id}&updated_at=eq.${encodeURIComponent(baseUpdatedAt)}&select=id,updated_at`,{
     method:"PATCH",headers:{...sbHeaders,"Prefer":"return=representation"},
     body:JSON.stringify({name,data,updated_at:new Date().toISOString()})});
   if(!res.ok)throw new Error("patch failed");
@@ -597,7 +597,7 @@ async function sbConditionalUpdate(id,name,data,baseUpdatedAt){
   return rows.length>0?{ok:true,row:rows[0]}:{conflict:true};
 }
 async function sbInsertProject(id,name,data){
-  const res=await fetch(`${SB_URL}/rest/v1/dekigata_projects`,{
+  const res=await fetch(`${SB_URL}/rest/v1/dekigata_projects?select=id,updated_at`,{
     method:"POST",headers:{...sbHeaders,"Prefer":"return=representation"},
     body:JSON.stringify({id,name,data,updated_at:new Date().toISOString()})});
   if(res.status===409)return{conflict:true};
@@ -630,6 +630,8 @@ async function sbDeleteProject(id){
   const res=await fetch(`${SB_URL}/rest/v1/dekigata_projects?id=eq.${id}`,{method:"DELETE",headers:sbHeaders});
   return res.ok;
 }
+// Storageのキーは英数字と . _ - のみ。日本語や記号はハッシュに置換
+function safeKey(str){const t=String(str||"");if(/^[A-Za-z0-9._-]{1,40}$/.test(t))return t;let h=0;for(let i=0;i<t.length;i++){h=(h*31+t.charCodeAt(i))|0;}return "k"+(h>>>0).toString(36);}
 async function sbUploadPhoto(path,blob){
   const res=await fetch(`${SB_URL}/storage/v1/object/dekigata-photos/${path}`,{
     method:"POST",
@@ -766,15 +768,31 @@ export default function App(){
 
   // クラウド保存: 条件付き更新 → 衝突したら取得→3wayマージ→再試行（他端末の入力を消さない）
   const savingRef=useRef(false);const rerunRef=useRef(false);
+  const[unsynced,setUnsynced]=useState(0);
   const syncSave=async()=>{
     const id=currentProjId;if(!id)return;
     if(savingRef.current){rerunRef.current=true;return;}
     savingRef.current=true;
     try{await syncSaveCore(id);}finally{savingRef.current=false;if(rerunRef.current){rerunRef.current=false;setTimeout(()=>{if(syncSaveRef.current)syncSaveRef.current();},300);}}
   };
+  const flushBase64=async(id,local)=>{
+    let changed=false;let remain=0;const repl=new Map();
+    const up=async(dataUrl,tag)=>{try{const blob=await(await fetch(dataUrl)).blob();const u=await sbUploadPhoto(`${id}/${tag}_${Date.now()}_${Math.random().toString(36).slice(2,6)}.jpg`,blob);if(u)repl.set(dataUrl,u);return u;}catch(e){return null;}};
+    for(const pt of (local.points||[])){for(const k of Object.keys(pt.photos||{})){for(const ph of (pt.photos[k]||[])){if(ph&&typeof ph.data==="string"&&ph.data.startsWith("data:")){const u=await up(ph.data,`${safeKey(pt.name)}_${safeKey(k)}`);if(u){ph.data=u;changed=true;}else remain++;}}}}
+    for(const ph of (local.albumPhotos||[])){if(ph&&typeof ph.data==="string"&&ph.data.startsWith("data:")){const u=await up(ph.data,`album_${safeKey(ph.phase||"x")}`);if(u){ph.data=u;changed=true;}else remain++;}}
+    for(const k of Object.keys(local.checkPhotos||{})){for(const ph of (local.checkPhotos[k]||[])){if(ph&&typeof ph.data==="string"&&ph.data.startsWith("data:")){const u=await up(ph.data,`check_${safeKey(k)}`);if(u){ph.data=u;changed=true;}else remain++;}}}
+    if(repl.size>0)setCur(p=>{const ph={...(p.photos||{})};let ch=false;for(const k of Object.keys(ph)){ph[k]=(ph[k]||[]).map(x=>(x&&repl.has(x.data))?(ch=true,{...x,data:repl.get(x.data)}):x);}return ch?{...p,photos:ph}:p;});
+    return{changed,remain};
+  };
   const syncSaveCore=async(id)=>{
     try{
-      let local=stateRef.current;let snap=snapRef.current;
+      // 未送信(base64)写真を先にStorageへ → DBには URL だけを入れる
+      const work=JSON.parse(JSON.stringify(stateRef.current));
+      const fl=await flushBase64(id,work);
+      setUnsynced(fl.remain);
+      if(fl.changed){applyData(work);}
+      if(JSON.stringify(work).length>2500000){setSyncStatus("offline");setToast(`写真${fl.remain}枚が未送信（電波を確認）`);setTimeout(()=>setToast(""),3000);return;}
+      let local=fl.changed?work:stateRef.current;let snap=snapRef.current;
       for(let attempt=0;attempt<3;attempt++){
         const name=(local.header&&local.header.projectName)||"";
         let r;
@@ -967,14 +985,16 @@ export default function App(){
       const img=new Image();
       img.onload=()=>{
         const canvas=document.createElement("canvas");
-        canvas.width=img.width;canvas.height=img.height;
+        const MAXPX=1600;const sc=Math.min(1,MAXPX/Math.max(img.width,img.height));
+        canvas.width=Math.round(img.width*sc);canvas.height=Math.round(img.height*sc);
         const ctx=canvas.getContext("2d");
-        ctx.drawImage(img,0,0);
+        ctx.drawImage(img,0,0,canvas.width,canvas.height);
+        const cw=canvas.width,chh=canvas.height;
         // 黒板（写真の約1/6、左下に配置）
-        const bbW=Math.round(img.width*0.32);
-        const bbH=Math.round(img.height*0.30);
-        const bbX=Math.round(img.width*0.02);
-        const bbY=img.height-bbH-Math.round(img.height*0.02);
+        const bbW=Math.round(cw*0.32);
+        const bbH=Math.round(chh*0.30);
+        const bbX=Math.round(cw*0.02);
+        const bbY=chh-bbH-Math.round(chh*0.02);
         ctx.fillStyle="#0a4d2e";ctx.fillRect(bbX,bbY,bbW,bbH);
         ctx.strokeStyle="#f5f5dc";ctx.lineWidth=Math.max(2,bbW*0.006);
         ctx.strokeRect(bbX+3,bbY+3,bbW-6,bbH-6);
@@ -1098,7 +1118,7 @@ export default function App(){
         canvas.toBlob(async(blob)=>{
           let src=null;
           try{
-            const tag=checkTarget?"check":albumTarget?`album_${albumTarget.phase}`:`${(cur.name||"pt").replace(/[^a-zA-Z0-9._-]/g,"_")}_s${photoStep}`;
+            const tag=checkTarget?"check":albumTarget?`album_${albumTarget.phase}`:`${safeKey(cur.name||"pt")}_${safeKey(String(photoStep))}`;
             const path=`${currentProjId||"misc"}/${tag}_${Date.now()}.jpg`;
             src=await sbUploadPhoto(path,blob);
           }catch(e){console.warn("photo upload failed, using base64",e);}
@@ -1284,7 +1304,7 @@ export default function App(){
           <div style={{fontSize:15,fontWeight:700}}>完了 {doneN} / {mergedSteps.length}{firstOpen>=0&&<span style={{fontSize:12,color:"#E65100",marginLeft:8}}>次：{mergedSteps[firstOpen].name}</span>}{firstOpen<0&&<span style={{fontSize:12,color:"#2E7D32",marginLeft:8}}>全工程 完了 ✅</span>}</div>
           <div style={{height:8,background:"#eee",borderRadius:4,marginTop:5,overflow:"hidden"}}><div style={{width:`${mergedSteps.length?Math.round(doneN/mergedSteps.length*100):0}%`,height:"100%",background:firstOpen<0?"#2E7D32":"#1565C0",transition:"width .3s"}}/></div>
         </div>
-        {(()=>{const b=syncStatus==="synced"?{t:"☁ 同期済",c:"#2E7D32",bg:"#E8F5E9"}:syncStatus==="syncing"?{t:"☁ 同期中…",c:"#E65100",bg:"#FFF3E0"}:{t:"⚠ オフライン",c:"#C62828",bg:"#FFEBEE"};return(<span style={{fontSize:11,fontWeight:700,color:b.c,background:b.bg,padding:"4px 8px",borderRadius:10,whiteSpace:"nowrap"}}>{b.t}</span>);})()}
+        {(()=>{const b=unsynced>0?{t:`⚠ 未送信${unsynced}枚`,c:"#C62828",bg:"#FFEBEE"}:syncStatus==="synced"?{t:"☁ 同期済",c:"#2E7D32",bg:"#E8F5E9"}:syncStatus==="syncing"?{t:"☁ 同期中…",c:"#E65100",bg:"#FFF3E0"}:{t:"⚠ オフライン",c:"#C62828",bg:"#FFEBEE"};return(<span style={{fontSize:11,fontWeight:700,color:b.c,background:b.bg,padding:"4px 8px",borderRadius:10,whiteSpace:"nowrap"}}>{b.t}</span>);})()}
         <button onClick={()=>jumpTo(firstOpen<0?mergedSteps.length-1:firstOpen)} style={{...S.camBtn,padding:"9px 12px",whiteSpace:"nowrap"}}>▼ 次へ</button>
       </div>
       <div style={{display:"flex",gap:3,marginTop:6,flexWrap:"wrap"}}>
@@ -1545,7 +1565,7 @@ export default function App(){
     </div>);}
 
   // ═══ LIST ═══
-  const syncBadge=syncStatus==="synced"?{t:"☁ 同期済",c:"#2E7D32",bg:"#E8F5E9"}:syncStatus==="syncing"?{t:"☁ 同期中…",c:"#E65100",bg:"#FFF3E0"}:{t:"⚠ オフライン",c:"#C62828",bg:"#FFEBEE"};
+  const syncBadge=unsynced>0?{t:`⚠ 写真未送信${unsynced}枚`,c:"#C62828",bg:"#FFEBEE"}:syncStatus==="synced"?{t:"☁ 同期済",c:"#2E7D32",bg:"#E8F5E9"}:syncStatus==="syncing"?{t:"☁ 同期中…",c:"#E65100",bg:"#FFF3E0"}:{t:"⚠ オフライン",c:"#C62828",bg:"#FFEBEE"};
   return(<div style={{...S.w,zoom:fontScale}}>
     <div style={S.top}><button style={S.bk} onClick={()=>setScreen("design")}>← 設計値</button>
       <h1 style={{fontSize:16,fontWeight:700,margin:0,flex:1,textAlign:"center",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{header.projectName||"出来形管理"}</h1>
