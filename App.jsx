@@ -80,7 +80,7 @@ function getOD(p,d){return(p==="DCIP"?OD_DCIP:p==="HPPE"?OD_HPPE:{})[d]||0;}
 function getDias(p){return p==="DCIP"?DIAS_DCIP:p==="HPPE"?DIAS_HPPE:[];}
 function calcH0(p,D,d){const od=getOD(p,d);return p==="HPPE"?D+od+100:D+od;}
 const FM={H:{label:"深さ",minus:30,plus:30},B:{label:"幅",minus:50,plus:null},Ba:{label:"舗装幅",minus:25,plus:null},D:{label:"埋設深",minus:30,plus:30},D2:{label:"埋設深②",minus:30,plus:30},ta:{label:"舗装厚",minus:7,plus:null},t0:{label:"基礎砂",minus:30,plus:30},t1:{label:"保護砂",minus:30,plus:30},t2:{label:"発生土",minus:30,plus:30},t3:{label:"発生土",minus:30,plus:30},t4:{label:"発生土",minus:30,plus:30},t5:{label:"路盤",minus:30,plus:30},t6:{label:"路盤",minus:30,plus:30},t7:{label:"路盤",minus:30,plus:30},A:{label:"弁芯距離",minus:null,plus:25},Hs:{label:"シート",minus:30,plus:30},Dm:{label:"マーカー",minus:30,plus:30}};
-const APP_VERSION="2.0.2";
+const APP_VERSION="2.0.3";
 const PL={DCIP:"DCIP",HPPE:"HPPE",SHIKIRI:"仕切弁筐"};
 const DIM_LABELS=["深さ","幅","厚さ","延長","高さ","径"];
 const ZONE_A=["t1","t2","t3","t4"],ZONE_B=["t5","t6","t7"];
@@ -137,7 +137,7 @@ body{font-family:"Hiragino Sans","MS Gothic",sans-serif;font-size:12px;color:#00
 @media print{@page{size:A4 portrait;margin:6mm}body{margin:0}
 svg{display:block}
 .mid-l svg{height:auto !important;max-height:97mm !important}
-.step-photo img{width:100% !important;height:100% !important;object-fit:cover !important}
+.step-photo img{width:100% !important;height:100% !important;object-fit:contain !important}
 .page,.step-page{transform:scale(0.97);transform-origin:top left;width:103.1%}}
 .page{page-break-after:always;width:100%;display:flex;flex-direction:column;height:270mm;overflow:hidden}
 table{border-collapse:collapse;width:100%}
@@ -165,7 +165,7 @@ td,th{border:0.5px solid #333;padding:3px 5px;font-size:12px;vertical-align:midd
 .step-hdr{font-size:14px;font-weight:bold;margin-bottom:3mm;display:flex;justify-content:space-between;padding-bottom:2mm;border-bottom:1px solid #333;flex-shrink:0}
 .step-card{border:0.5px solid #333;margin-bottom:2mm;padding:2.5mm;display:grid;grid-template-columns:1.8fr 1fr;grid-template-rows:1fr auto;gap:2.5mm;flex:1;overflow:hidden;min-height:0}
 .step-photo{grid-row:1/3;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;font-size:12px;color:#999;background:#fafafa;overflow:hidden;position:relative}
-.step-photo img{width:100%;height:100%;object-fit:cover;display:block}
+.step-photo img{width:100%;height:100%;object-fit:contain;object-position:center;display:block;background:#fff}
 .step-mz{border:0.5px solid #ddd;padding:3px;display:flex;align-items:stretch;justify-content:stretch;background:#fafafa;overflow:hidden}
 .step-mz svg{width:100%;height:100%;display:block;flex:1}
 .step-info{font-size:12px;display:flex;flex-direction:column;overflow:hidden}
@@ -509,7 +509,7 @@ body{font-family:"Hiragino Sans","MS Gothic",sans-serif;font-size:12px;color:#00
 .al-block.pl{grid-template-columns:57% 1fr}
 .al-block.pr{grid-template-columns:1fr 57%}
 .al-photo{display:flex;align-items:flex-start;height:100%}
-.al-photo img{width:100%;max-height:80mm;object-fit:cover;display:block}
+.al-photo img{width:100%;max-height:80mm;object-fit:contain;display:block;background:#fff}
 .al-txt{font-size:12px;padding-top:0.5mm}
 .al-field{border-bottom:0.4px solid #888;padding:1px 0 2px;min-height:16px}
 .al-gap{height:8px}
