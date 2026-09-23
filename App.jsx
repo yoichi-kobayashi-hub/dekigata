@@ -80,7 +80,7 @@ function getOD(p,d){return(p==="DCIP"?OD_DCIP:p==="HPPE"?OD_HPPE:{})[d]||0;}
 function getDias(p){return p==="DCIP"?DIAS_DCIP:p==="HPPE"?DIAS_HPPE:[];}
 function calcH0(p,D,d){const od=getOD(p,d);return p==="HPPE"?D+od+100:D+od;}
 const FM={H:{label:"深さ",minus:30,plus:30},B:{label:"幅",minus:50,plus:null},Ba:{label:"舗装幅",minus:25,plus:null},D:{label:"埋設深",minus:30,plus:30},D2:{label:"埋設深②",minus:30,plus:30},ta:{label:"舗装厚",minus:7,plus:null},t0:{label:"基礎砂",minus:30,plus:30},t1:{label:"保護砂",minus:30,plus:30},t2:{label:"発生土",minus:30,plus:30},t3:{label:"発生土",minus:30,plus:30},t4:{label:"発生土",minus:30,plus:30},t5:{label:"路盤",minus:30,plus:30},t6:{label:"路盤",minus:30,plus:30},t7:{label:"路盤",minus:30,plus:30},A:{label:"弁芯距離",minus:null,plus:25},Hs:{label:"シート",minus:30,plus:30},Dm:{label:"マーカー",minus:30,plus:30}};
-const APP_VERSION="1.9.4";
+const APP_VERSION="1.9.5";
 const PL={DCIP:"DCIP",HPPE:"HPPE",SHIKIRI:"仕切弁筐"};
 const DIM_LABELS=["深さ","幅","厚さ","延長","高さ","径"];
 const ZONE_A=["t1","t2","t3","t4"],ZONE_B=["t5","t6","t7"];
@@ -927,6 +927,16 @@ export default function App(){
   const bulkCreate=()=>{const pts=[];for(let i=1;i<=bulkCount;i++)pts.push({name:`No.${i}`,date:"",measured:{},photos:{}});setPoints(pts);};
   const editPoint=(i)=>{const p=JSON.parse(JSON.stringify(points[i]));if(!p.photos)p.photos={};setCur(p);setEditIdx(i);setScreen("entry");};
   const savePoint=()=>{if(editIdx!==null)setPoints(p=>{const n=[...p];n[editIdx]={...cur};return n;});setScreen("list");};
+  // 測点編集中は cur の変更を即 points に反映（=自動保存→クラウドへ）。保存ボタン待ちで消える事故を構造で防ぐ
+  useEffect(()=>{
+    if(screen!=="entry"||editIdx===null)return;
+    setPoints(p=>{
+      if(!p[editIdx])return p;
+      if(JSON.stringify(p[editIdx])===JSON.stringify(cur))return p;
+      const n=[...p];n[editIdx]={...cur};return n;
+    });
+  // eslint-disable-next-line
+  },[cur,screen,editIdx]);
 
   const autoFieldVal=(k)=>{if(k==="管径"){if(!header.diameter)return"—";return pipe2?`φ${dia}+φ${pipe2.diameter}`:`φ${header.diameter}`;}return"";};
   const renderFields=(spec,get,set)=>(<div style={{marginTop:8,display:"flex",flexDirection:"column",gap:6}}>
@@ -1274,6 +1284,7 @@ export default function App(){
           <div style={{fontSize:15,fontWeight:700}}>完了 {doneN} / {mergedSteps.length}{firstOpen>=0&&<span style={{fontSize:12,color:"#E65100",marginLeft:8}}>次：{mergedSteps[firstOpen].name}</span>}{firstOpen<0&&<span style={{fontSize:12,color:"#2E7D32",marginLeft:8}}>全工程 完了 ✅</span>}</div>
           <div style={{height:8,background:"#eee",borderRadius:4,marginTop:5,overflow:"hidden"}}><div style={{width:`${mergedSteps.length?Math.round(doneN/mergedSteps.length*100):0}%`,height:"100%",background:firstOpen<0?"#2E7D32":"#1565C0",transition:"width .3s"}}/></div>
         </div>
+        {(()=>{const b=syncStatus==="synced"?{t:"☁ 同期済",c:"#2E7D32",bg:"#E8F5E9"}:syncStatus==="syncing"?{t:"☁ 同期中…",c:"#E65100",bg:"#FFF3E0"}:{t:"⚠ オフライン",c:"#C62828",bg:"#FFEBEE"};return(<span style={{fontSize:11,fontWeight:700,color:b.c,background:b.bg,padding:"4px 8px",borderRadius:10,whiteSpace:"nowrap"}}>{b.t}</span>);})()}
         <button onClick={()=>jumpTo(firstOpen<0?mergedSteps.length-1:firstOpen)} style={{...S.camBtn,padding:"9px 12px",whiteSpace:"nowrap"}}>▼ 次へ</button>
       </div>
       <div style={{display:"flex",gap:3,marginTop:6,flexWrap:"wrap"}}>
@@ -1385,7 +1396,7 @@ export default function App(){
             <img src={ph.data} onClick={()=>setViewPhoto(ph.data)} style={{width:64,height:64,objectFit:"cover",borderRadius:8,border:"1px solid #ddd",cursor:"pointer"}}/>
             <button onClick={()=>delPhoto(step.id,pi)} style={{position:"absolute",top:-6,right:-6,width:20,height:20,borderRadius:10,background:"#C62828",color:"#fff",border:"none",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>×</button></div>))}</div>)}
       </div>);})}
-    <button style={S.pri} onClick={savePoint}>更新 ✓</button>
+    <button style={S.pri} onClick={savePoint}>✓ 一覧に戻る（入力・写真は自動保存済み）</button>
     {viewPhoto&&(<div onClick={()=>setViewPhoto(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
       <img src={viewPhoto} style={{maxWidth:"100%",maxHeight:"90vh",borderRadius:12}}/></div>)}
   </div>);}
