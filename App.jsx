@@ -13,22 +13,22 @@ function mkDCIP(road,surface,D){
     {id:1,name:"掘削",inputs:["H","B"],tKey:null,prevRef:null,extra:[]},
     {id:2,name:"管布設",inputs:["D"],tKey:null,prevRef:null,extra:[]},
     {id:3,name:"砂埋戻し",inputs:["H","B"],tKey:"t1",tDef:100,prevRef:"D",extra:[]},
-    {id:4,name:"発生土埋戻し",inputs:["H","B"],tKey:"t2",tDef:200,prevRef:3,extra:[{key:"Hs",label:"埋設シート",design:Hs,minus:30,plus:30},{key:"Dm",label:"マーカーピン",design:700,minus:30,plus:30}]},
-    {id:5,name:"発生土埋戻し",inputs:["H","B"],tKey:"t3",tDef:200,prevRef:4,extra:[]},
-    {id:6,name:"発生土埋戻し",inputs:["H","B"],tKey:"t4",tDef:isG?200:160,prevRef:5,extra:[]},
-    {id:7,name:"路盤砕石",inputs:["H","B"],tKey:"t5",tDef:150,prevRef:6,extra:[]},
-    {id:8,name:"路盤砕石",inputs:["H","B"],tKey:"t6",tDef:150,prevRef:7,extra:[]},
+    {id:4,name:"発生土埋戻し①",inputs:["H","B"],tKey:"t2",tDef:200,prevRef:3,extra:[{key:"Hs",label:"埋設シート",design:Hs,minus:30,plus:30},{key:"Dm",label:"マーカーピン",design:700,minus:30,plus:30}]},
+    {id:5,name:"発生土埋戻し②",inputs:["H","B"],tKey:"t3",tDef:200,prevRef:4,extra:[]},
+    {id:6,name:"発生土埋戻し③",inputs:["H","B"],tKey:"t4",tDef:isG?200:160,prevRef:5,extra:[]},
+    {id:7,name:"路盤砕石①",inputs:["H","B"],tKey:"t5",tDef:150,prevRef:6,extra:[]},
+    {id:8,name:"路盤砕石②",inputs:["H","B"],tKey:"t6",tDef:150,prevRef:7,extra:[]},
   ];if(!isG)s.push({id:9,name:"舗装",inputs:["Ba","ta"],tKey:null,prevRef:null,extra:[]});return s;}
   const s=[
     {id:1,name:"掘削",inputs:["H","B"],tKey:null,prevRef:null,extra:[]},
     {id:2,name:"管布設",inputs:["D"],tKey:null,prevRef:null,extra:[]},
     {id:3,name:"砂埋戻し",inputs:["H","B"],tKey:"t1",tDef:100,prevRef:"D",extra:[]},
-    {id:4,name:"発生土埋戻し",inputs:["H","B"],tKey:"t2",tDef:200,prevRef:3,extra:[{key:"Hs",label:"埋設シート",design:Hs,minus:30,plus:30}]},
-    {id:5,name:"発生土埋戻し",inputs:["H","B"],tKey:"t3",tDef:200,prevRef:4,extra:[{key:"Dm",label:"マーカーピン",design:700,minus:30,plus:30}]},
-    {id:6,name:"発生土埋戻し",inputs:["H","B"],tKey:"t4",tDef:200,prevRef:5,extra:[]},
-    {id:7,name:"発生土埋戻し",inputs:["H","B"],tKey:"t5",tDef:isG?200:160,prevRef:6,extra:[]},
-    {id:8,name:"路盤砕石",inputs:["H","B"],tKey:"t6",tDef:150,prevRef:7,extra:[]},
-    {id:9,name:"路盤砕石",inputs:["H","B"],tKey:"t7",tDef:150,prevRef:8,extra:[]},
+    {id:4,name:"発生土埋戻し①",inputs:["H","B"],tKey:"t2",tDef:200,prevRef:3,extra:[{key:"Hs",label:"埋設シート",design:Hs,minus:30,plus:30}]},
+    {id:5,name:"発生土埋戻し②",inputs:["H","B"],tKey:"t3",tDef:200,prevRef:4,extra:[{key:"Dm",label:"マーカーピン",design:700,minus:30,plus:30}]},
+    {id:6,name:"発生土埋戻し③",inputs:["H","B"],tKey:"t4",tDef:200,prevRef:5,extra:[]},
+    {id:7,name:"発生土埋戻し④",inputs:["H","B"],tKey:"t5",tDef:isG?200:160,prevRef:6,extra:[]},
+    {id:8,name:"路盤砕石①",inputs:["H","B"],tKey:"t6",tDef:150,prevRef:7,extra:[]},
+    {id:9,name:"路盤砕石②",inputs:["H","B"],tKey:"t7",tDef:150,prevRef:8,extra:[]},
   ];if(!isG)s.push({id:10,name:"舗装",inputs:["Ba","ta"],tKey:null,prevRef:null,extra:[]});return s;
 }
 function mkHPPE(road,surface,D){
@@ -38,33 +38,71 @@ function mkHPPE(road,surface,D){
     {id:2,name:"基礎砂",inputs:["H","B"],tKey:"t0",tDef:100,prevRef:1,extra:[]},
     {id:3,name:"管布設",inputs:["D"],tKey:null,prevRef:null,extra:[]},
     {id:4,name:"砂埋戻し",inputs:["H","B"],tKey:"t1",tDef:100,prevRef:"D",extra:[]},
-    {id:5,name:"発生土埋戻し",inputs:["H","B"],tKey:"t2",tDef:200,prevRef:4,extra:[{key:"Hs",label:"埋設シート",design:Hs,minus:30,plus:30},{key:"Dm",label:"マーカーピン",design:700,minus:30,plus:30}]},
-    {id:6,name:"発生土埋戻し",inputs:["H","B"],tKey:"t3",tDef:200,prevRef:5,extra:[]},
-    {id:7,name:"発生土埋戻し",inputs:["H","B"],tKey:"t4",tDef:isG?200:160,prevRef:6,extra:[]},
-    {id:8,name:"路盤砕石",inputs:["H","B"],tKey:"t5",tDef:150,prevRef:7,extra:[]},
-    {id:9,name:"路盤砕石",inputs:["H","B"],tKey:"t6",tDef:150,prevRef:8,extra:[]},
+    {id:5,name:"発生土埋戻し①",inputs:["H","B"],tKey:"t2",tDef:200,prevRef:4,extra:[{key:"Hs",label:"埋設シート",design:Hs,minus:30,plus:30},{key:"Dm",label:"マーカーピン",design:700,minus:30,plus:30}]},
+    {id:6,name:"発生土埋戻し②",inputs:["H","B"],tKey:"t3",tDef:200,prevRef:5,extra:[]},
+    {id:7,name:"発生土埋戻し③",inputs:["H","B"],tKey:"t4",tDef:isG?200:160,prevRef:6,extra:[]},
+    {id:8,name:"路盤砕石①",inputs:["H","B"],tKey:"t5",tDef:150,prevRef:7,extra:[]},
+    {id:9,name:"路盤砕石②",inputs:["H","B"],tKey:"t6",tDef:150,prevRef:8,extra:[]},
   ];if(!isG)s.push({id:10,name:"舗装",inputs:["Ba","ta"],tKey:null,prevRef:null,extra:[]});return s;}
   const s=[
     {id:1,name:"掘削",inputs:["H","B"],tKey:null,prevRef:null,extra:[]},
     {id:2,name:"基礎砂",inputs:["H","B"],tKey:"t0",tDef:100,prevRef:1,extra:[]},
     {id:3,name:"管布設",inputs:["D"],tKey:null,prevRef:null,extra:[]},
     {id:4,name:"砂埋戻し",inputs:["H","B"],tKey:"t1",tDef:100,prevRef:"D",extra:[]},
-    {id:5,name:"発生土埋戻し",inputs:["H","B"],tKey:"t2",tDef:200,prevRef:4,extra:[{key:"Hs",label:"埋設シート",design:Hs,minus:30,plus:30}]},
-    {id:6,name:"発生土埋戻し",inputs:["H","B"],tKey:"t3",tDef:200,prevRef:5,extra:[{key:"Dm",label:"マーカーピン",design:700,minus:30,plus:30}]},
-    {id:7,name:"発生土埋戻し",inputs:["H","B"],tKey:"t4",tDef:200,prevRef:6,extra:[]},
-    {id:8,name:"発生土埋戻し",inputs:["H","B"],tKey:"t5",tDef:isG?200:160,prevRef:7,extra:[]},
-    {id:9,name:"路盤砕石",inputs:["H","B"],tKey:"t6",tDef:150,prevRef:8,extra:[]},
-    {id:10,name:"路盤砕石",inputs:["H","B"],tKey:"t7",tDef:150,prevRef:9,extra:[]},
+    {id:5,name:"発生土埋戻し①",inputs:["H","B"],tKey:"t2",tDef:200,prevRef:4,extra:[{key:"Hs",label:"埋設シート",design:Hs,minus:30,plus:30}]},
+    {id:6,name:"発生土埋戻し②",inputs:["H","B"],tKey:"t3",tDef:200,prevRef:5,extra:[{key:"Dm",label:"マーカーピン",design:700,minus:30,plus:30}]},
+    {id:7,name:"発生土埋戻し③",inputs:["H","B"],tKey:"t4",tDef:200,prevRef:6,extra:[]},
+    {id:8,name:"発生土埋戻し④",inputs:["H","B"],tKey:"t5",tDef:isG?200:160,prevRef:7,extra:[]},
+    {id:9,name:"路盤砕石①",inputs:["H","B"],tKey:"t6",tDef:150,prevRef:8,extra:[]},
+    {id:10,name:"路盤砕石②",inputs:["H","B"],tKey:"t7",tDef:150,prevRef:9,extra:[]},
   ];if(!isG)s.push({id:11,name:"舗装",inputs:["Ba","ta"],tKey:null,prevRef:null,extra:[]});return s;
 }
 function getSteps(p,r,sf,D){if(p==="SHIKIRI")return[{id:1,name:"弁筐設置",inputs:["A","H"],tKey:null,prevRef:null,extra:[]}];return p==="DCIP"?mkDCIP(r,sf,D):mkHPPE(r,sf,D);}
+// テンプレ項目（"@工程名"=出来形工程の位置、それ以外=状況写真）と出来形工程を一本の流れにマージ
+function mergeSteps(steps,items){
+  const placed=new Set();const out=[];
+  const placeUpTo=(k)=>{for(let i=0;i<=k;i++){if(!placed.has(i)){placed.add(i);out.push(steps[i]);}}};
+  (items||[]).forEach(it=>{
+    const s=String(it).trim();if(!s)return;
+    if(s.startsWith("@")){
+      const key=s.slice(1).replace(/[①②③④⑤⑥⑦⑧⑨]/g,"").trim();
+      const k=steps.findIndex((st,i)=>!placed.has(i)&&(st.name.includes(key)||st.tKey===key));
+      if(k>=0)placeUpTo(k);
+    }else{
+      out.push({id:"p:"+s,name:s,photoOnly:true,inputs:[],tKey:null,prevRef:null,extra:[]});
+    }
+  });
+  for(let i=0;i<steps.length;i++){if(!placed.has(i)){placed.add(i);out.push(steps[i]);}}
+  return out;
+}
 function getDefaults(steps){const d={};steps.forEach(s=>{if(s.tKey&&s.tDef)d[s.tKey]=s.tDef;});if(steps.some(s=>s.inputs?.includes("ta")))d.ta=40;return d;}
 function getOD(p,d){return(p==="DCIP"?OD_DCIP:p==="HPPE"?OD_HPPE:{})[d]||0;}
 function getDias(p){return p==="DCIP"?DIAS_DCIP:p==="HPPE"?DIAS_HPPE:[];}
 function calcH0(p,D,d){const od=getOD(p,d);return p==="HPPE"?D+od+100:D+od;}
-const FM={H:{label:"深さ",minus:30,plus:30},B:{label:"幅",minus:50,plus:null},Ba:{label:"舗装幅",minus:25,plus:null},D:{label:"埋設深",minus:30,plus:30},ta:{label:"舗装厚",minus:7,plus:null},t0:{label:"基礎砂",minus:30,plus:30},t1:{label:"保護砂",minus:30,plus:30},t2:{label:"発生土",minus:30,plus:30},t3:{label:"発生土",minus:30,plus:30},t4:{label:"発生土",minus:30,plus:30},t5:{label:"路盤",minus:30,plus:30},t6:{label:"路盤",minus:30,plus:30},t7:{label:"路盤",minus:30,plus:30},A:{label:"弁芯距離",minus:null,plus:25},Hs:{label:"シート",minus:30,plus:30},Dm:{label:"マーカー",minus:30,plus:30}};
+const FM={H:{label:"深さ",minus:30,plus:30},B:{label:"幅",minus:50,plus:null},Ba:{label:"舗装幅",minus:25,plus:null},D:{label:"埋設深",minus:30,plus:30},D2:{label:"埋設深②",minus:30,plus:30},ta:{label:"舗装厚",minus:7,plus:null},t0:{label:"基礎砂",minus:30,plus:30},t1:{label:"保護砂",minus:30,plus:30},t2:{label:"発生土",minus:30,plus:30},t3:{label:"発生土",minus:30,plus:30},t4:{label:"発生土",minus:30,plus:30},t5:{label:"路盤",minus:30,plus:30},t6:{label:"路盤",minus:30,plus:30},t7:{label:"路盤",minus:30,plus:30},A:{label:"弁芯距離",minus:null,plus:25},Hs:{label:"シート",minus:30,plus:30},Dm:{label:"マーカー",minus:30,plus:30}};
 const PL={DCIP:"DCIP",HPPE:"HPPE",SHIKIRI:"仕切弁筐"};
 const DIM_LABELS=["深さ","幅","厚さ","延長","高さ","径"];
+const ZONE_A=["t1","t2","t3","t4"],ZONE_B=["t5","t6","t7"];
+// 状況写真の記入項目（項目名の部分一致で決定。該当なし=null→汎用チップ、fields空=📷のみ）
+const MACHINE_OPTS=["0.1㎥","0.14㎥","0.2㎥","0.25㎥"];
+const PHOTO_FIELDS=[
+  {match:"剥ぎ取り",fields:[{k:"機械",t:"choice",o:MACHINE_OPTS}]},
+  {match:"掘削状況",fields:[{k:"機械",t:"choice",o:MACHINE_OPTS}]},
+  {match:"路盤厚",fields:[{k:"厚さH",t:"num",u:"mm"}]},
+  {match:"管布設",fields:[{k:"管径",t:"auto"},{k:"トルク",t:"choice",o:["60N·m","100N·m","直管"]}]},
+  {match:"発生土転圧",fields:[{k:"層",t:"choice",o:["①","②","③"]}]},
+  {match:"砕石転圧",fields:[{k:"層",t:"choice",o:["①","②"]}]},
+  {match:"舗装切断",fields:[]},{match:"積込",fields:[]},{match:"床均し",fields:[]},{match:"明示テープ",fields:[]},
+  {match:"ポリスリーブ",fields:[]},{match:"砂埋戻し転圧",fields:[]},{match:"乳剤",fields:[]},{match:"舗装完了",fields:[]},{match:"表示シート",fields:[]},
+];
+function photoSpec(name){const n=String(name||"");if(/転圧/.test(n)&&/[①②③④⑤]/.test(n))return[];const hit=PHOTO_FIELDS.find(p=>n.includes(p.match));return hit?hit.fields:null;}
+function fieldPairs(spec,get,autoVal){return (spec||[]).map(f=>{if(f.t==="auto")return[f.k,autoVal(f.k)];const v=get(f.k);return(v!==undefined&&v!==null&&String(v).trim()!=="")?[f.k,`${v}${f.u||""}`]:null;}).filter(Boolean);}
+// 測点の実測D①（主管）。埋戻し以降の設計H起点に使う（未入力ならnull→設計D起点）
+function measuredD(steps,measured){const ps=steps.find(s=>s.inputs.includes("D"));if(!ps||!measured)return null;const v=measured[`${ps.id}_D`];if(v===undefined||v===""||isNaN(Number(v)))return null;return Number(v);}
+// t自動計算: 前工程H（最初は実測D）− 今工程H
+function calcTm(step,steps,meas){if(!step||!step.tKey||step.prevRef===null||step.prevRef===undefined||!meas)return null;let pv;if(step.prevRef==="D"){const ds=steps.find(s=>s.inputs.includes("D"));pv=ds?meas[`${ds.id}_D`]:null;}else pv=meas[`${step.prevRef}_H`];const ch=meas[`${step.id}_H`];if(pv===undefined||pv===null||pv===""||ch===undefined||ch===null||ch==="")return null;return Number(pv)-Number(ch);}
+// Hs/Dm 自動計算: シート・ピンは発生土①天端 → Dm=そのH, Hs=実測D①−H
+function autoExtra(ex,step,steps,meas){if(!ex||!step||!meas)return null;const h=meas[`${step.id}_H`];if(h===undefined||h===""||isNaN(Number(h)))return null;if(ex.key==="Dm")return Math.round(Number(h));if(ex.key==="Hs"){const dm=measuredD(steps,meas);if(dm===null)return null;return Math.round(dm-Number(h));}const v=meas[`${step.id}_${ex.key}`];return(v===undefined||v==="")?null:Number(v);}
 function judge(e,f,m){const meta=m||FM[f];if(!meta||e===null||isNaN(e))return null;if(meta.minus!==null&&e<-meta.minus)return"×";if(meta.plus!==null&&e>meta.plus)return"×";return"○";}
 function today(){const d=new Date();return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
 function nowTime(){return new Date().toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"});}
@@ -72,12 +110,13 @@ function nowTime(){return new Date().toLocaleTimeString("ja-JP",{hour:"2-digit",
 // ═══════════════════════════════════════
 // PDF出力（印刷ベース）
 // ═══════════════════════════════════════
-function generatePDF({header,pipeType,roadType,surfaceType,design,points,steps,dia,od,D,H0}){
-  const allItems=["B","Ba","H","t1","t2","t3","t4","t5","t6","ta","D","Hs","Dm"];
+function generatePDF({header,pipeType,roadType,surfaceType,design,points,steps,dia,od,D,H0,pipe2,od2,D2}){
+  const allItems=pipe2?["B","Ba","H","t1","t2","t3","t4","t5","t6","ta","D","D2","Hs","Dm"]:["B","Ba","H","t1","t2","t3","t4","t5","t6","ta","D","Hs","Dm"];
+  const lbl=(it)=>pipe2&&it==="D"?"D①":it==="D2"?"D②":it;
   const road=ROADS.find(r=>r.key===roadType);
   const designVals={};
   allItems.forEach(it=>{
-    if(it==="H")designVals[it]=H0;else if(it==="D")designVals[it]=D;
+    if(it==="H")designVals[it]=H0;else if(it==="D")designVals[it]=D;else if(it==="D2")designVals[it]=D2;
     else if(it==="B")designVals[it]=design.B?Number(design.B):null;
     else if(it==="Ba")designVals[it]=design.Ba?Number(design.Ba):null;
     else if(it==="ta")designVals[it]=Number(design.ta)||40;
@@ -85,7 +124,7 @@ function generatePDF({header,pipeType,roadType,surfaceType,design,points,steps,d
     else designVals[it]=design[it]?Number(design[it]):null;
   });
   const judgeItem=(it,mv)=>{if(mv===null||designVals[it]===null)return"";const err=mv-designVals[it];const meta=FM[it];if(!meta)return"";if(meta.minus!==null&&err<-meta.minus)return"×";if(meta.plus!==null&&err>meta.plus)return"×";return"○";};
-  const getMeasured=(pt,it)=>{for(const s of steps){const k=`${s.id}_${it}`;if(pt.measured[k]!==undefined&&pt.measured[k]!=="")return Number(pt.measured[k]);for(const ex of s.extra){if(ex.key===it){const ek=`${s.id}_${it}`;if(pt.measured[ek]!==undefined&&pt.measured[ek]!=="")return Number(pt.measured[ek]);}}}return null;};
+  const getMeasured=(pt,it)=>{const ts=steps.find(s=>s.tKey===it);if(ts){const tv=calcTm(ts,steps,pt.measured);return tv!==null?Math.round(tv):null;}for(const s of steps){const k=`${s.id}_${it}`;if(pt.measured[k]!==undefined&&pt.measured[k]!=="")return Number(pt.measured[k]);for(const ex of s.extra){if(ex.key===it){return autoExtra(ex,s,steps,pt.measured);}}}return null;};
 
   const css=`*{margin:0;padding:0;box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -160,11 +199,22 @@ td,th{border:0.5px solid #333;padding:3px 5px;font-size:12px;vertical-align:midd
       yy+=lh;
     });
     const pr=pipeLh/2,pcx=mzX+mzW/2,pcy=pipeY+pipeLh/2;
-    mzSvg+=`<circle cx="${pcx}" cy="${pcy}" r="${pr}" fill="none" stroke="#333" stroke-width="0.8"/>`;
-    mzSvg+=`<text x="${pcx}" y="${pcy+3}" text-anchor="middle" fill="#555" font-size="11" font-weight="bold" font-family="sans-serif">φ${dia}</text>`;
-    mzSvg+=`<line x1="${pcx-pr}" y1="${bt23}" x2="${pcx+pr}" y2="${bt23}" stroke="#1565C0" stroke-width="1.2"/>`;
-    let zp=`M ${pcx-pr} ${bt23+1}`;
-    for(let zi=0;zi<Math.floor(pr*2/3);zi++){const zx=(pcx-pr)+zi*3;zp+=` L ${zx+1.5} ${bt23+3} L ${zx+3} ${bt23+1}`;}
+    let shL=pcx-pr,shR=pcx+pr;
+    if(pipe2&&od2){
+      const r2=pr*(od2/od);const gap=pr*0.3;const tw=pr*2+gap+r2*2;
+      const cx1=pcx-tw/2+pr;const cx2=cx1+pr+gap+r2;const cy2=pipeY+pipeLh-r2;
+      mzSvg+=`<circle cx="${cx1}" cy="${pcy}" r="${pr}" fill="none" stroke="#333" stroke-width="0.8"/>`;
+      mzSvg+=`<text x="${cx1}" y="${pcy+3}" text-anchor="middle" fill="#555" font-size="8" font-weight="bold" font-family="sans-serif">φ${dia}</text>`;
+      mzSvg+=`<circle cx="${cx2}" cy="${cy2}" r="${r2}" fill="none" stroke="#333" stroke-width="0.8"/>`;
+      mzSvg+=`<text x="${cx2}" y="${cy2+3}" text-anchor="middle" fill="#555" font-size="8" font-weight="bold" font-family="sans-serif">φ${pipe2.diameter}</text>`;
+      shL=cx1-pr;shR=cx2+r2;
+    }else{
+      mzSvg+=`<circle cx="${pcx}" cy="${pcy}" r="${pr}" fill="none" stroke="#333" stroke-width="0.8"/>`;
+      mzSvg+=`<text x="${pcx}" y="${pcy+3}" text-anchor="middle" fill="#555" font-size="11" font-weight="bold" font-family="sans-serif">φ${dia}</text>`;
+    }
+    mzSvg+=`<line x1="${shL}" y1="${bt23}" x2="${shR}" y2="${bt23}" stroke="#1565C0" stroke-width="1.2"/>`;
+    let zp=`M ${shL} ${bt23+1}`;
+    for(let zi=0;zi<Math.floor((shR-shL)/3);zi++){const zx=shL+zi*3;zp+=` L ${zx+1.5} ${bt23+3} L ${zx+3} ${bt23+1}`;}
     mzSvg+=`<path d="${zp}" fill="none" stroke="#1565C0" stroke-width="0.4"/>`;
     mzSvg+=`<line x1="${pcx}" y1="${bt23-9}" x2="${pcx}" y2="${bt23+7}" stroke="#1565C0" stroke-width="1.2"/>`;
     mzSvg+=`<line x1="${pcx-4}" y1="${bt23-9}" x2="${pcx+4}" y2="${bt23-9}" stroke="#1565C0" stroke-width="1.5"/>`;
@@ -191,7 +241,7 @@ td,th{border:0.5px solid #333;padding:3px 5px;font-size:12px;vertical-align:midd
     html+=`<table><tr><th>項目</th><th style="width:25px">-mm</th><th style="width:25px">+mm</th></tr>`;
     html+=`<tr><td>床付幅B</td><td>-50</td><td></td></tr><tr><td>舗装幅Ba</td><td>-25</td><td></td></tr>`;
     html+=`<tr><td>掘削深H</td><td>-30</td><td>30</td></tr><tr><td>埋戻厚tn</td><td>-30</td><td>30</td></tr>`;
-    html+=`<tr><td>舗装厚ta</td><td>-7</td><td></td></tr><tr><td>埋設深D</td><td>-30</td><td>30</td></tr>`;
+    html+=`<tr><td>舗装厚ta</td><td>-7</td><td></td></tr><tr><td>埋設深D${pipe2?"①②":""}</td><td>-30</td><td>30</td></tr>`;
     html+=`<tr><td>Hs※1</td><td>-30</td><td>30</td></tr><tr><td>Dm※2</td><td>-30</td><td>30</td></tr></table>`;
     html+=`<div class="note">※1 埋設シート位置 管上0.3m</div><div class="note">※2 マーカー位置 DP=0.70m</div></div></div>`;
 
@@ -205,9 +255,9 @@ td,th{border:0.5px solid #333;padding:3px 5px;font-size:12px;vertical-align:midd
     allItems.forEach(it=>{
       const dv=designVals[it];if(dv===null)return;
       const mL=getMeasured(ptL,it);const eL=mL!==null?mL-dv:null;const jL=mL!==null?judgeItem(it,mL):"";
-      html+=`<tr><td class="itm">${it}</td><td>${dv}</td><td>${mL!==null?mL:""}</td><td>${eL!==null?(eL>0?"+":"")+eL:""}</td><td>${ptL.date||""}</td><td class="${jL==="○"?"ok":jL==="×"?"ng":""}">${jL}</td>`;
+      html+=`<tr><td class="itm">${lbl(it)}</td><td>${dv}</td><td>${mL!==null?mL:""}</td><td>${eL!==null?(eL>0?"+":"")+eL:""}</td><td>${ptL.date||""}</td><td class="${jL==="○"?"ok":jL==="×"?"ng":""}">${jL}</td>`;
       if(ptR){const mR=getMeasured(ptR,it);const eR=mR!==null?mR-dv:null;const jR=mR!==null?judgeItem(it,mR):"";
-        html+=`<td class="itm sep">${it}</td><td>${dv}</td><td>${mR!==null?mR:""}</td><td>${eR!==null?(eR>0?"+":"")+eR:""}</td><td>${ptR.date||""}</td><td class="${jR==="○"?"ok":jR==="×"?"ng":""}">${jR}</td>`;
+        html+=`<td class="itm sep">${lbl(it)}</td><td>${dv}</td><td>${mR!==null?mR:""}</td><td>${eR!==null?(eR>0?"+":"")+eR:""}</td><td>${ptR.date||""}</td><td class="${jR==="○"?"ok":jR==="×"?"ng":""}">${jR}</td>`;
       }else html+=`<td class="sep" colspan="6"></td>`;
       html+=`</tr>`;
     });
@@ -220,9 +270,10 @@ td,th{border:0.5px solid #333;padding:3px 5px;font-size:12px;vertical-align:midd
       ?[{k:"ta",t:40,n:"AS"},{k:"t6",t:Number(design.t6)||150,n:"路盤"},{k:"t5",t:Number(design.t5)||150,n:"路盤"},{k:"t4",t:Number(design.t4)||160,n:"発生土"},{k:"t3",t:Number(design.t3)||200,n:"発生土"},{k:"t2",t:Number(design.t2)||200,n:"発生土"},{k:"t1",t:Number(design.t1)||100,n:"保護砂"},{k:"pipe",t:od,n:""},{k:"t0",t:Number(design.t0)||100,n:"基礎砂"}]
       :[{k:"ta",t:40,n:"AS"},{k:"t6",t:Number(design.t6)||150,n:"路盤"},{k:"t5",t:Number(design.t5)||150,n:"路盤"},{k:"t4",t:Number(design.t4)||160,n:"発生土"},{k:"t3",t:Number(design.t3)||200,n:"発生土"},{k:"t2",t:Number(design.t2)||200,n:"発生土"},{k:"t1",t:Number(design.t1)||100,n:"保護砂"},{k:"pipe",t:od,n:""}];
     const tot=ls.reduce((s,l)=>s+l.t,0);
-    const filled={};let ap=false;
-    for(const s2 of steps){
-      if(s2.id>step.id)break;
+    const filled={};
+    const stepIdx=steps.indexOf(step);
+    for(let si=0;si<=stepIdx&&si<steps.length;si++){
+      const s2=steps[si];
       if(s2.tKey)filled[s2.tKey]=true;
       if(s2.inputs.includes("D"))filled["pipe"]=true;
     }
@@ -253,12 +304,24 @@ td,th{border:0.5px solid #333;padding:3px 5px;font-size:12px;vertical-align:midd
     });
     const pr=pipeLh/2,pcx=mx+mw/2,pcy=pipeY+pipeLh/2;
     const isHiP=hiKeys["pipe"];
-    s+=`<circle cx="${pcx}" cy="${pcy}" r="${pr}" fill="${isHiP?'#1565C0':filled["pipe"]?'#E3F2FD':'none'}" stroke="#333" stroke-width="0.6"/>`;
-    s+=`<text x="${pcx}" y="${pcy+2}" text-anchor="middle" fill="${isHiP?'#fff':'#555'}" font-size="9" font-family="sans-serif">φ${dia}</text>`;
+    const pFill=isHiP?'#1565C0':filled["pipe"]?'#E3F2FD':'none';const pTxt=isHiP?'#fff':'#555';
+    let shL=pcx-pr,shR=pcx+pr;
+    if(pipe2&&od2){
+      const r2=pr*(od2/od);const gap=pr*0.3;const tw=pr*2+gap+r2*2;
+      const cx1=pcx-tw/2+pr;const cx2=cx1+pr+gap+r2;const cy2=pipeY+pipeLh-r2;
+      s+=`<circle cx="${cx1}" cy="${pcy}" r="${pr}" fill="${pFill}" stroke="#333" stroke-width="0.6"/>`;
+      s+=`<text x="${cx1}" y="${pcy+2}" text-anchor="middle" fill="${pTxt}" font-size="6" font-family="sans-serif">φ${dia}</text>`;
+      s+=`<circle cx="${cx2}" cy="${cy2}" r="${r2}" fill="${pFill}" stroke="#333" stroke-width="0.6"/>`;
+      s+=`<text x="${cx2}" y="${cy2+2}" text-anchor="middle" fill="${pTxt}" font-size="6" font-family="sans-serif">φ${pipe2.diameter}</text>`;
+      shL=cx1-pr;shR=cx2+r2;
+    }else{
+      s+=`<circle cx="${pcx}" cy="${pcy}" r="${pr}" fill="${pFill}" stroke="#333" stroke-width="0.6"/>`;
+      s+=`<text x="${pcx}" y="${pcy+2}" text-anchor="middle" fill="${pTxt}" font-size="9" font-family="sans-serif">φ${dia}</text>`;
+    }
     const blue="#1565C0";
-    s+=`<line x1="${pcx-pr}" y1="${bt23}" x2="${pcx+pr}" y2="${bt23}" stroke="${blue}" stroke-width="1"/>`;
-    let zp=`M ${pcx-pr} ${bt23+0.8}`;
-    for(let zi=0;zi<Math.floor(pr*2/2.5);zi++){const zx=(pcx-pr)+zi*2.5;zp+=` L ${zx+1.25} ${bt23+2.5} L ${zx+2.5} ${bt23+0.8}`;}
+    s+=`<line x1="${shL}" y1="${bt23}" x2="${shR}" y2="${bt23}" stroke="${blue}" stroke-width="1"/>`;
+    let zp=`M ${shL} ${bt23+0.8}`;
+    for(let zi=0;zi<Math.floor((shR-shL)/2.5);zi++){const zx=shL+zi*2.5;zp+=` L ${zx+1.25} ${bt23+2.5} L ${zx+2.5} ${bt23+0.8}`;}
     s+=`<path d="${zp}" fill="none" stroke="${blue}" stroke-width="0.3"/>`;
     s+=`<line x1="${pcx}" y1="${bt23-7}" x2="${pcx}" y2="${bt23+5}" stroke="${blue}" stroke-width="1"/>`;
     s+=`<line x1="${pcx-3}" y1="${bt23-7}" x2="${pcx+3}" y2="${bt23-7}" stroke="${blue}" stroke-width="1.2"/>`;
@@ -324,29 +387,42 @@ td,th{border:0.5px solid #333;padding:3px 5px;font-size:12px;vertical-align:midd
         const photoContent=stepPhotos.length>0
           ?`<img src="${stepPhotos[0].data}" alt="${pt.name} ${step.name}"/>`
           :`<span>写真未撮影（${pt.name} ${step.name}）</span>`;
+        if(step.photoOnly){
+          html+=`<div class="step-card"><div class="step-photo">${photoContent}</div><div class="step-mz">${mkStepMz(step,pt)}</div><div class="step-info">`;
+          html+=`<div class="step-title">${step.name}</div>`;
+          html+=`<div style="font-size:11px;color:#666">状況写真</div>`;
+          {const spec=photoSpec(step.name);if(spec&&spec.length){const av=(k)=>k==="管径"?(pipe2?`φ${dia}+φ${pipe2.diameter}`:`φ${dia}`):"";const prs=fieldPairs(spec,(k)=>pt.measured[`${step.id}_f_${k}`],av);if(prs.length)html+=`<div style="font-size:11px;margin-top:3px">${prs.map(([k,v])=>`${k}：<b>${v}</b>`).join("　")}</div>`;}}
+          html+=`<div style="font-size:10px;color:#888;margin-top:auto">${pt.date||""}</div>`;
+          html+=`</div></div>`;
+          continue;
+        }
         html+=`<div class="step-card"><div class="step-photo">${photoContent}</div><div class="step-mz">${mkStepMz(step,pt)}</div><div class="step-info">`;
         html+=`<div class="step-title">${step.id}. ${step.name}</div>`;
         html+=`<table><tr><th>項目</th><th>設計</th><th>実測</th><th>判定</th></tr>`;
         step.inputs.forEach(f=>{
           let dVal=null;
-          if(f==="H"){let hh=D;let ap=false;for(const s2 of steps){if(s2.inputs.includes("D")){ap=true;continue;}if(!ap)continue;if(s2.id>step.id)break;if(s2.tKey&&s2.tKey!=="t0"&&design[s2.tKey])hh-=Number(design[s2.tKey]);}dVal=step.id===1?H0:Math.round(hh);}
+          if(f==="H"){const dmP=measuredD(steps,pt.measured);let hh=dmP!==null?dmP:D;let ap=false;for(const s2 of steps){if(s2.inputs.includes("D")){ap=true;continue;}if(!ap)continue;if(typeof s2.id==="number"&&s2.id>step.id)break;if(s2.tKey&&s2.tKey!=="t0"&&design[s2.tKey])hh-=Number(design[s2.tKey]);}dVal=step.id===1?H0:Math.round(hh);}
           else if(f==="B")dVal=design.B?Number(design.B):null;
           else if(f==="Ba")dVal=design.Ba?Number(design.Ba):null;
           else if(f==="D")dVal=D;
+          else if(f==="D2")dVal=D2;
           else if(f==="ta")dVal=Number(design.ta)||40;
           const key=`${step.id}_${f}`;const mv=pt.measured[key]??"";
           const err=dVal!==null&&mv!==""?Number(mv)-dVal:null;
           const j=err!==null?judge(err,f):null;
-          html+=`<tr><td>${f}</td><td>${dVal!==null?dVal:""}</td><td>${mv}</td><td class="${j==="○"?"ok":j==="×"?"ng":""}">${j||""}</td></tr>`;
+          html+=`<tr><td>${lbl(f)}</td><td>${dVal!==null?dVal:""}</td><td>${mv}</td><td class="${j==="○"?"ok":j==="×"?"ng":""}">${j||""}</td></tr>`;
         });
         if(step.tKey){
           const tD=design[step.tKey]?Number(design[step.tKey]):null;
-          html+=`<tr><td>${step.tKey}</td><td>${tD||""}</td><td></td><td></td></tr>`;
+          const tM=calcTm(step,steps,pt.measured);
+          const tj=(tM!==null&&tD!==null)?judge(tM-tD,step.tKey):null;
+          html+=`<tr><td>${step.tKey}</td><td>${tD||""}</td><td>${tM!==null?Math.round(tM):""}</td><td class="${tj==="○"?"ok":tj==="×"?"ng":""}">${tj||""}</td></tr>`;
         }
+        if(step.inputs.includes("D")&&pt.measured[`${step.id}_f_トルク`]){const tv=pt.measured[`${step.id}_f_トルク`];html+=tv==="直管"?`<tr><td>継手</td><td colspan="3">直管（トルク管理なし）</td></tr>`:`<tr><td>トルク</td><td colspan="3">${tv}</td></tr>`;}
         step.extra.forEach(ex=>{
-          const key=`${step.id}_${ex.key}`;const mv=pt.measured[key]??"";
-          const err=mv!==""?Number(mv)-ex.design:null;const j=err!==null?judge(err,ex.key,ex):null;
-          html+=`<tr><td>${ex.key}</td><td>${ex.design}</td><td>${mv}</td><td class="${j==="○"?"ok":j==="×"?"ng":""}">${j||""}</td></tr>`;
+          const av=autoExtra(ex,step,steps,pt.measured);const mv=av!==null?av:"";
+          const err=av!==null?av-ex.design:null;const j=err!==null?judge(err,ex.key,ex):null;
+          html+=`<tr><td>${ex.key}<span style="font-size:8px;color:#888">(自動)</span></td><td>${ex.design}</td><td>${mv}</td><td class="${j==="○"?"ok":j==="×"?"ng":""}">${j||""}</td></tr>`;
         });
         html+=`</table></div></div>`;
       }
@@ -520,6 +596,8 @@ export default function App(){
   const[tplLoaded,setTplLoaded]=useState(false);
   const[newItemName,setNewItemName]=useState("");
   const[checkNotes,setCheckNotes]=useState({});
+  const[fontScale,setFontScale]=useState(()=>{try{const v=localStorage.getItem("dekigata_zoom");return v?Number(v):1.15;}catch(e){return 1.15;}});
+  const setZoom=(z)=>{setFontScale(z);try{localStorage.setItem("dekigata_zoom",String(z));}catch(e){}};
   const[checkDims,setCheckDims]=useState({});
   const[projects,setProjects]=useState([]);
   const[currentProjId,setCurrentProjId]=useState(null);
@@ -666,22 +744,30 @@ export default function App(){
 
   const road=ROADS.find(r=>r.key===roadType);
   const D=road.D;const dia=header.diameter;const od=getOD(pipeType,dia);
-  const H0=pipeType==="SHIKIRI"?0:calcH0(pipeType,D,dia);
-  const steps=getSteps(pipeType,roadType,surfaceType,D);
+  const pipe2=(header.pipe2&&header.pipe2.diameter)?header.pipe2:null;
+  const od2=pipe2?getOD(pipe2.pipeType||pipeType,Number(pipe2.diameter)):0;
+  const H0=pipeType==="SHIKIRI"?0:(pipe2?D+Math.max(od,od2)+(pipeType==="HPPE"?100:0):calcH0(pipeType,D,dia));
+  const D2=pipe2?H0-(pipeType==="HPPE"?100:0)-od2:null;
+  const steps0=getSteps(pipeType,roadType,surfaceType,D);
+  const steps=pipe2?steps0.map(st=>st.inputs.includes("D")?{...st,inputs:[...st.inputs,"D2"]}:st):steps0;
+  const fl=(f)=>pipe2&&f==="D"?"D①":f==="D2"?"D②":f;
+  const hasAnchors=(checkItems||[]).some(i=>String(i).trim().startsWith("@"));
+  const mergedSteps=hasAnchors?mergeSteps(steps,checkItems):steps;
   const tSum=steps.reduce((s,st)=>s+(st.tKey&&design[st.tKey]?Number(design[st.tKey]):0),0)+(design.ta?Number(design.ta):0);
 
   const rebuild=(p,r,sf)=>{const st=getSteps(p,r,sf,ROADS.find(x=>x.key===r).D);setDesign(d=>({...getDefaults(st),B:d.B||"",Ba:d.Ba||""}));setPoints([]);};
   if(!inited&&loaded&&currentProjId&&!projects.find(p=>p.id===currentProjId)){rebuild("DCIP","shidou","asphalt");setInited(true);}
 
-  const calcDesignH=(sid)=>{
+  const calcDesignH=(sid,measured)=>{
     if(sid===1)return H0;const bStep=steps.find(s=>s.tKey==="t0");
     if(bStep&&sid===bStep.id)return H0-(Number(design.t0)||0);
-    let h=D;let ap=false;
+    const dm=measuredD(steps,measured||cur.measured);
+    let h=dm!==null?dm:D;let ap=false;
     for(const s of steps){if(s.inputs.includes("D")){ap=true;continue;}if(!ap)continue;if(s.id>sid)break;if(s.tKey&&s.tKey!=="t0"&&design[s.tKey])h-=Number(design[s.tKey]);}
     return Math.round(h);
   };
-  const dv=(f,sid)=>{if(f==="H")return calcDesignH(sid);if(f==="B")return design.B?Number(design.B):null;if(f==="Ba")return design.Ba?Number(design.Ba):null;if(f==="D")return D;if(f==="ta")return Number(design.ta)||40;return design[f]?Number(design[f]):null;};
-  const calcT=(step,meas)=>{if(!step.tKey||step.prevRef===null)return null;let pv;if(step.prevRef==="D"){const ds=steps.find(s=>s.inputs.includes("D"));pv=ds?meas[`${ds.id}_D`]:null;}else pv=meas[`${step.prevRef}_H`];const ch=meas[`${step.id}_H`];if(!pv||pv===""||!ch||ch==="")return null;return Number(pv)-Number(ch);};
+  const dv=(f,sid)=>{if(f==="H")return calcDesignH(sid);if(f==="B")return design.B?Number(design.B):null;if(f==="Ba")return design.Ba?Number(design.Ba):null;if(f==="D")return D;if(f==="D2")return D2;if(f==="ta")return Number(design.ta)||40;return design[f]?Number(design[f]):null;};
+  const calcT=(step,meas)=>calcTm(step,steps,meas);
   const prevLbl=(step)=>{if(!step.prevRef)return"";if(step.prevRef==="D"){const ds=steps.find(s=>s.inputs.includes("D"));return`D(${ds?.id})−H(${step.id})`;}return`H(${step.prevRef})−H(${step.id})`;};
 
   const selPipe=(k)=>{setPipeType(k);const ds=getDias(k);if(ds.length&&!ds.includes(header.diameter))setHeader(h=>({...h,diameter:ds[0]}));rebuild(k,roadType,surfaceType);};
@@ -691,7 +777,19 @@ export default function App(){
   const editPoint=(i)=>{const p=JSON.parse(JSON.stringify(points[i]));if(!p.photos)p.photos={};setCur(p);setEditIdx(i);setScreen("entry");};
   const savePoint=()=>{if(editIdx!==null)setPoints(p=>{const n=[...p];n[editIdx]={...cur};return n;});setScreen("list");};
 
+  const autoFieldVal=(k)=>{if(k==="管径"){if(!header.diameter)return"—";return pipe2?`φ${dia}+φ${pipe2.diameter}`:`φ${header.diameter}`;}return"";};
+  const renderFields=(spec,get,set)=>(<div style={{marginTop:8,display:"flex",flexDirection:"column",gap:6}}>
+    {spec.map(f=>{
+      if(f.t==="auto")return(<div key={f.k} style={{fontSize:12,color:"#1565C0",fontWeight:600}}>{f.k}：{autoFieldVal(f.k)}<span style={{fontSize:12,color:"#888",marginLeft:4}}>（設定から自動）</span></div>);
+      if(f.t==="choice")return(<div key={f.k} style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}><span style={{fontSize:12,fontWeight:700,minWidth:40}}>{f.k}</span>
+        {f.o.map(o=>{const on=get(f.k)===o;return(<button key={o} onClick={()=>set(f.k,on?"":o)} style={{padding:"6px 12px",borderRadius:14,border:`1.5px solid ${on?"#1565C0":"#ccc"}`,background:on?"#1565C0":"#fff",color:on?"#fff":"#555",fontSize:13,fontWeight:700,cursor:"pointer"}}>{o}</button>);})}</div>);
+      if(f.t==="num")return(<div key={f.k} style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:12,fontWeight:700,minWidth:40}}>{f.k}</span>
+        <input inputMode="decimal" style={{...S.inp,width:96,textAlign:"right",fontSize:16,fontWeight:700,padding:"7px 8px"}} value={get(f.k)||""} onChange={e=>set(f.k,e.target.value.replace(/[^0-9.\-]/g,""))} placeholder="0"/><span style={{fontSize:12,color:"#888"}}>{f.u||""}</span></div>);
+      return null;})}
+  </div>);
   const composeNote=(item)=>{
+    const spec=photoSpec(item);
+    if(spec){const free=(checkNotes[item]||"").trim();const pairs=fieldPairs(spec,(k)=>(checkDims[item]||{})[k],autoFieldVal).map(([k,v])=>`${k}${v}`);if(free)pairs.push(free);return pairs.join(" ");}
     const d=checkDims[item]||{};
     const parts=DIM_LABELS.filter(l=>d[l]!==undefined&&String(d[l]).trim()!=="").map(l=>`${l}${String(d[l]).trim()}`);
     const free=(checkNotes[item]||"").trim();
@@ -801,20 +899,30 @@ export default function App(){
           ctx.textAlign="left";
         }else{
           // ── 工程用 key-value黒板 ──
-          const step=steps.find(s=>s.id===photoStep);
-          const baseFs=Math.round(bbH*0.10);
-          const lineH=Math.round(bbH*0.115);
+          const step=mergedSteps.find(s=>s.id===photoStep)||steps.find(s=>s.id===photoStep);
+          const baseFs=Math.round(bbH*0.095);
+          const lineH=Math.round(bbH*0.1);
           let ty=bbY+pad+baseFs;
           const lines=[];
           if(header.projectName)lines.push(["工事名",header.projectName.length>12?header.projectName.slice(0,12)+"…":header.projectName]);
           lines.push(["測点",cur.name||""]);
-          lines.push(["工程",`${step.id}.${step.name}`]);
-          lines.push(["管種",`${PL[pipeType]} φ${dia}`]);
-          const hVal=(()=>{if(step.id===1)return H0;const bs=steps.find(s=>s.tKey==="t0");if(bs&&step.id===bs.id)return H0-(Number(design.t0)||0);let h=D;let a=false;for(const x of steps){if(x.inputs.includes("D")){a=true;continue;}if(!a)continue;if(x.id>step.id)break;if(x.tKey&&x.tKey!=="t0"&&design[x.tKey])h-=Number(design[x.tKey]);}return h;})();
-          if(step.inputs.includes("H"))lines.push(["設計H",`${hVal}mm`]);
-          if(step.inputs.includes("D"))lines.push(["設計D",`${D}mm`]);
-          if(step.inputs.includes("Ba"))lines.push(["設計Ba",`${design.Ba||""}mm`]);
-          if(step.tKey&&design[step.tKey])lines.push([step.tKey,`${design[step.tKey]}mm`]);
+          lines.push(["工程",step.photoOnly?step.name:`${step.id}.${step.name}`]);
+          if(step.photoOnly){const spec=photoSpec(step.name);if(spec)fieldPairs(spec,(k)=>cur.measured[`${step.id}_f_${k}`],autoFieldVal).forEach(([k,v])=>lines.push([k,v]));}
+          lines.push(["管種",pipe2?`${PL[pipeType]}φ${dia}+${PL[pipe2.pipeType||pipeType]}φ${pipe2.diameter}`:`${PL[pipeType]} φ${dia}`]);
+          if(!step.photoOnly){
+            const hVal=(()=>{if(step.id===1)return H0;const bs=steps.find(s=>s.tKey==="t0");if(bs&&step.id===bs.id)return H0-(Number(design.t0)||0);const dmB=measuredD(steps,cur.measured);let h=dmB!==null?dmB:D;let a=false;for(const x of steps){if(x.inputs.includes("D")){a=true;continue;}if(!a)continue;if(x.id>step.id)break;if(x.tKey&&x.tKey!=="t0"&&design[x.tKey])h-=Number(design[x.tKey]);}return h;})();
+            const mvB=(f)=>{const v=cur.measured[`${step.id}_${f}`];return(v===undefined||v==="")?null:Number(v);};
+            const dl=(lbl,dsg,f)=>{const m=mvB(f);if(m!==null&&dsg!==null&&dsg!==""){const j=judge(m-Number(dsg),f)||"";lines.push([lbl,`設${dsg} 実${m}${j}`]);}else lines.push([lbl,`設計${dsg!==null&&dsg!==""?dsg:"—"}`]);};
+            if(step.inputs.includes("H"))dl("H",hVal,"H");
+            if(step.inputs.includes("B")&&mvB("B")!==null)dl("B",design.B||"","B");
+            if(step.inputs.includes("D"))dl(pipe2?"D①":"D",D,"D");
+            if(step.inputs.includes("D2"))dl("D②",D2,"D2");
+            if(step.inputs.includes("D")&&cur.measured[`${step.id}_f_トルク`]){const tv=cur.measured[`${step.id}_f_トルク`];lines.push(tv==="直管"?["継手","直管(トルク無)"]:["トルク",tv]);}
+            if(step.inputs.includes("Ba"))dl("Ba",design.Ba||"","Ba");
+            if(step.inputs.includes("ta"))dl("ta",Number(design.ta)||40,"ta");
+            if(step.tKey&&design[step.tKey]){const tD=Number(design[step.tKey]);const tM=calcTm(step,steps,cur.measured);if(tM!==null){const j=judge(tM-tD,step.tKey)||"";lines.push([step.tKey,`設${tD} 実${Math.round(tM)}${j}`]);}else lines.push([step.tKey,`設計${tD}`]);}
+            step.extra.forEach(ex=>{const m=autoExtra(ex,step,steps,cur.measured);if(m!==null){const j=judge(m-ex.design,ex.key,ex)||"";lines.push([ex.key,`設${ex.design} 実${m}${j}`]);}});
+          }
           lines.push(["日付",cur.date||today()]);
           lines.push(["会社","(有)信濃住宅設備"]);
           lines.forEach(([k,v])=>{
@@ -853,7 +961,7 @@ export default function App(){
   const totalPhotos=(pt)=>{if(!pt.photos)return 0;return Object.values(pt.photos).reduce((s,a)=>s+a.length,0);};
 
   const handlePDF=()=>{
-    generatePDF({header,pipeType,roadType,surfaceType,design,points,steps,dia,od,D,H0});
+    generatePDF({header,pipeType,roadType,surfaceType,design,points,steps:mergedSteps,dia,od,D,H0,pipe2,od2,D2});
     setToast("PDF出力完了");setTimeout(()=>setToast(""),3000);
   };
 
@@ -871,41 +979,58 @@ export default function App(){
   // ═══ SETUP ═══
   if(screen==="setup"){const dias=getDias(pipeType);
     const workMode=header.projectType===undefined?"public":header.projectType;
+    const seqTpls=(templates||[]).filter(t=>(Array.isArray(t.items)?t.items:[]).some(i=>String(i).trim().startsWith("@")));
+    const simpleTpls=(templates||[]).filter(t=>!seqTpls.includes(t));
     const selSimple=(tpl)=>{setHeader(h=>({...h,projectType:"simple",workKind:tpl.name,diameter:""}));setCheckItems(Array.isArray(tpl.items)?tpl.items:[]);};
-    const selPublic=()=>{setHeader(h=>({...h,projectType:"public",workKind:"",diameter:h.diameter&&Number(h.diameter)>0?Number(h.diameter):150}));};
-    return(<div style={S.w}>
+    const selPublic=()=>{setHeader(h=>({...h,projectType:"public",workKind:"",diameter:h.diameter&&Number(h.diameter)>0?Number(h.diameter):150}));if((checkItems||[]).length===0&&seqTpls[0])setCheckItems(seqTpls[0].items);};
+    return(<div style={{...S.w,zoom:fontScale}}>
     <div style={S.top}><h1 style={S.logo}>出来形かんたん</h1><div style={{display:"flex",alignItems:"center",gap:6}}><span style={S.bg}>{workMode==="simple"?"簡易":"1/3"}</span><button style={{...S.bk,fontSize:20,padding:"4px 8px"}} onClick={()=>setShowProjList(true)} title="プロジェクト一覧">≡</button></div></div>
     <div style={S.c}><div style={S.ch}>工事情報</div>
       {[["projectName","工事名"],["location","工事箇所"]].map(([k,l])=>(<div key={k} style={{marginBottom:8}}><label style={S.lb}>{l}</label><input style={S.inp} value={header[k]||""} onChange={e=>setHeader(h=>({...h,[k]:e.target.value}))} placeholder={l}/></div>))}</div>
     <div style={S.c}><div style={S.ch}>工種を選ぶ</div>
       <div style={{display:"flex",flexDirection:"column",gap:6}}>
-        {(templates||[]).map(tpl=>(<button key={tpl.id} onClick={()=>selSimple(tpl)} style={{...S.sel,textAlign:"left",padding:"10px 14px",...(workMode==="simple"&&header.workKind===tpl.name?S.selOn:{})}}>
+        {simpleTpls.map(tpl=>(<button key={tpl.id} onClick={()=>selSimple(tpl)} style={{...S.sel,textAlign:"left",padding:"10px 14px",...(workMode==="simple"&&header.workKind===tpl.name?S.selOn:{})}}>
           <div style={{fontSize:14,fontWeight:700}}>{tpl.name}</div>
-          <div style={{fontSize:10,opacity:.6}}>{(Array.isArray(tpl.items)?tpl.items:[]).length}項目・撮影チェックリスト</div></button>))}
-        {!tplLoaded&&<div style={{fontSize:11,color:"#888",textAlign:"center",padding:"6px 0"}}>工種テンプレ読込中…</div>}
+          <div style={{fontSize:12,opacity:.6}}>{(Array.isArray(tpl.items)?tpl.items:[]).length}項目・撮影チェックリスト</div></button>))}
+        {!tplLoaded&&<div style={{fontSize:12,color:"#888",textAlign:"center",padding:"6px 0"}}>工種テンプレ読込中…</div>}
         <button onClick={selPublic} style={{...S.sel,textAlign:"left",padding:"10px 14px",borderWidth:2,...(workMode==="public"?S.selOn:{})}}>
           <div style={{fontSize:14,fontWeight:700}}>公共工事・配水管布設（出来形管理）</div>
-          <div style={{fontSize:10,opacity:.6}}>測点・検測・検査記録表・写真台帳フル装備</div></button>
+          <div style={{fontSize:12,opacity:.6}}>{seqTpls[0]?`工程テンプレ「${seqTpls[0].name}」で状況写真と出来形を一本の流れに展開`:"測点・検測・検査記録表・写真台帳フル装備"}</div></button>
       </div></div>
     {workMode==="simple"&&<>
       <div style={S.c}><div style={S.ch}>口径（任意）</div>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <span style={{fontSize:18,fontWeight:700}}>φ</span>
           <input inputMode="decimal" style={{...S.inp,width:110,fontSize:17,textAlign:"right",fontWeight:700}} value={header.diameter||""} onChange={e=>setHeader(h=>({...h,diameter:e.target.value.replace(/[^0-9.]/g,"")}))} placeholder="20"/>
-          <span style={{fontSize:11,color:"#888"}}>黒板に入ります（空欄OK・後から変更可）</span></div></div>
+          <span style={{fontSize:12,color:"#888"}}>黒板に入ります（空欄OK・後から変更可）</span></div></div>
       <button style={S.pri} onClick={()=>setScreen("check")}>📷 撮影スタート →</button>
     </>}
     {workMode==="public"&&<>
     <div style={S.c}><div style={S.ch}>管種</div><div style={{display:"flex",gap:6}}>
-      {["DCIP","HPPE"].map(k=>(<button key={k} onClick={()=>selPipe(k)} style={{...S.sel,flex:1,...(pipeType===k?S.selOn:{})}}><div style={{fontSize:14,fontWeight:700}}>{k}</div><div style={{fontSize:10,opacity:.6}}>{k==="DCIP"?"ダクタイル鋳鉄管":"ポリエチレン管"}</div></button>))}
+      {["DCIP","HPPE"].map(k=>(<button key={k} onClick={()=>selPipe(k)} style={{...S.sel,flex:1,...(pipeType===k?S.selOn:{})}}><div style={{fontSize:14,fontWeight:700}}>{k}</div><div style={{fontSize:12,opacity:.6}}>{k==="DCIP"?"ダクタイル鋳鉄管":"ポリエチレン管"}</div></button>))}
       <button onClick={()=>selPipe("SHIKIRI")} style={{...S.sel,flex:.7,...(pipeType==="SHIKIRI"?S.selOn:{})}}><div style={{fontSize:12,fontWeight:700}}>仕切弁筐</div></button></div></div>
     {pipeType!=="SHIKIRI"&&<>
       <div style={S.c}><div style={S.ch}>道路種別</div><div style={{display:"flex",gap:8}}>
         {ROADS.map(r=>(<button key={r.key} onClick={()=>selRoad(r.key)} style={{...S.rb,...(roadType===r.key?S.rbOn:{})}}><span style={{fontSize:22,fontWeight:700}}>{r.label}</span><span style={{fontSize:12,opacity:.7}}>D={r.D}</span></button>))}</div></div>
       <div style={S.c}><div style={S.ch}>路面</div><div style={{display:"flex",gap:8}}>
-        {SURFACES.map(sf=>(<button key={sf.key} onClick={()=>selSurface(sf.key)} style={{...S.sfb,...(surfaceType===sf.key?S.sfbOn:{})}}><span style={{fontSize:16,fontWeight:700}}>{sf.label}</span><span style={{fontSize:11,opacity:.6}}>{sf.key==="asphalt"?"舗装あり":"舗装なし"}</span></button>))}</div></div>
+        {SURFACES.map(sf=>(<button key={sf.key} onClick={()=>selSurface(sf.key)} style={{...S.sfb,...(surfaceType===sf.key?S.sfbOn:{})}}><span style={{fontSize:16,fontWeight:700}}>{sf.label}</span><span style={{fontSize:12,opacity:.6}}>{sf.key==="asphalt"?"舗装あり":"舗装なし"}</span></button>))}</div></div>
       <div style={S.c}><div style={S.ch}>口径</div><div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-        {dias.map(d=>(<button key={d} onClick={()=>setHeader(h=>({...h,diameter:d}))} style={{...S.db,...(dia===d?S.dbOn:{})}}><div style={{fontSize:15,fontWeight:700}}>φ{d}</div><div style={{fontSize:10,opacity:.6}}>OD {getOD(pipeType,d)}</div></button>))}</div></div>
+        {dias.map(d=>(<button key={d} onClick={()=>setHeader(h=>({...h,diameter:d}))} style={{...S.db,...(dia===d?S.dbOn:{})}}><div style={{fontSize:15,fontWeight:700}}>φ{d}</div><div style={{fontSize:12,opacity:.6}}>OD {getOD(pipeType,d)}</div></button>))}</div></div>
+      <div style={S.c}><div style={S.ch}>2条配管</div>
+        <div style={{display:"flex",gap:6}}>
+          <button onClick={()=>setHeader(h=>{const n={...h};delete n.pipe2;return n;})} style={{...S.sel,flex:1,...(!header.pipe2?S.selOn:{})}}><div style={{fontSize:13,fontWeight:700}}>1条（通常）</div></button>
+          <button onClick={()=>setHeader(h=>({...h,pipe2:h.pipe2||{pipeType:pipeType,diameter:dia}}))} style={{...S.sel,flex:1,...(header.pipe2?S.selOn:{})}}><div style={{fontSize:13,fontWeight:700}}>2条目あり</div><div style={{fontSize:12,opacity:.6}}>同一掘削に2本並列</div></button></div>
+        {header.pipe2&&(<>
+          <div style={{fontSize:12,color:"#888",margin:"8px 0 4px"}}>2条目の管種・口径（1条目は口径の大きい方＝主管にしてください）</div>
+          <div style={{display:"flex",gap:6,marginBottom:6}}>
+            {["DCIP","HPPE"].map(k=>(<button key={k} onClick={()=>setHeader(h=>{const ds=getDias(k);const cd=Number(h.pipe2?.diameter);return{...h,pipe2:{pipeType:k,diameter:ds.includes(cd)?cd:ds[0]}};})} style={{...S.sel,flex:1,...((header.pipe2.pipeType||pipeType)===k?S.selOn:{})}}><div style={{fontSize:13,fontWeight:700}}>{k}</div></button>))}
+            <button onClick={()=>setHeader(h=>({...h,pipe2:{pipeType:pipeType,diameter:dia}}))} style={{...S.sel,flex:1}}><div style={{fontSize:12,fontWeight:700}}>1条目と同じ</div></button></div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+            {getDias(header.pipe2.pipeType||pipeType).map(d=>(<button key={d} onClick={()=>setHeader(h=>({...h,pipe2:{...h.pipe2,diameter:d}}))} style={{...S.db,...(Number(header.pipe2.diameter)===d?S.dbOn:{})}}><div style={{fontSize:14,fontWeight:700}}>φ{d}</div><div style={{fontSize:12,opacity:.6}}>OD {getOD(header.pipe2.pipeType||pipeType,d)}</div></button>))}</div>
+          {od2>od&&<div style={{fontSize:12,color:"#C62828",marginTop:6,fontWeight:600}}>⚠ 2条目の方が大きい口径です。1条目（主管）と入れ替えてください</div>}
+          <div style={{fontSize:12,color:"#1565C0",marginTop:6}}>設計H={H0}（大きい方のODで決定）／ 設計D①={D}　D②={D2}（同床付け・OD差分）</div>
+        </>)}
+      </div>
     </>}
     <button style={S.pri} onClick={()=>setScreen("design")}>設計値確認 →</button>
     </>}
@@ -914,6 +1039,10 @@ export default function App(){
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
           <h2 style={{fontSize:18,fontWeight:700,margin:0}}>プロジェクト一覧</h2>
           <button style={{background:"none",border:"none",fontSize:24,cursor:"pointer",color:"#888",padding:"0 8px"}} onClick={()=>setShowProjList(false)}>×</button>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,padding:"8px 10px",background:"#f5f5f5",borderRadius:8}}>
+          <span style={{fontSize:13,fontWeight:600,flex:1}}>文字サイズ</span>
+          {[["標準",1.0],["大",1.15],["特大",1.3]].map(([l,z])=>(<button key={l} onClick={()=>setZoom(z)} style={{padding:"6px 12px",borderRadius:14,border:`1.5px solid ${fontScale===z?"#1565C0":"#ccc"}`,background:fontScale===z?"#1565C0":"#fff",color:fontScale===z?"#fff":"#555",fontSize:13,fontWeight:700,cursor:"pointer"}}>{l}</button>))}
         </div>
         <button style={{...S.pri,marginBottom:16}} onClick={newProject}>+ 新規プロジェクト</button>
         {projects.length===0?(<div style={{textAlign:"center",padding:"20px 0",color:"#888",fontSize:13}}>プロジェクトなし</div>):(
@@ -926,8 +1055,8 @@ export default function App(){
             return(<div key={pj.id} style={{border:isCurrent?"2px solid #1565C0":"1px solid #ddd",borderRadius:10,padding:"10px 12px",marginBottom:8,background:isCurrent?"#E3F2FD":"#fff"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:15,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nameShow}{isCurrent&&<span style={{fontSize:10,color:"#1565C0",marginLeft:6}}>（現在）</span>}</div>
-                  <div style={{fontSize:11,color:"#888",marginTop:2}}>{pipeLabel} φ{pj.header?.diameter||"—"} / {ptsN}測点 / {dt}</div>
+                  <div style={{fontSize:15,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nameShow}{isCurrent&&<span style={{fontSize:12,color:"#1565C0",marginLeft:6}}>（現在）</span>}</div>
+                  <div style={{fontSize:12,color:"#888",marginTop:2}}>{pipeLabel} φ{pj.header?.diameter||"—"} / {ptsN}測点 / {dt}</div>
                 </div>
                 <div style={{display:"flex",gap:4,flexShrink:0}}>
                   {!isCurrent&&<button style={{...S.sm,fontSize:13,background:"#E3F2FD",padding:"6px 10px",borderRadius:6}} onClick={()=>switchProject(pj.id)}>開く</button>}
@@ -943,8 +1072,10 @@ export default function App(){
     </div>);}
 
   // ═══ DESIGN ═══
-  if(screen==="design"){return(<div style={S.w}>
+  if(screen==="design"){return(<div style={{...S.w,zoom:fontScale}}>
     <div style={S.top}><button style={S.bk} onClick={()=>setScreen("setup")}>← 設定</button><span style={S.bg}>2/3 設計値</span></div>
+    {pipe2&&<div style={{...S.c,background:"#E3F2FD",border:"1px solid #90CAF9"}}><div style={{fontSize:13,fontWeight:700,color:"#1565C0"}}>2条配管：{PL[pipeType]}φ{dia} ＋ {PL[pipe2.pipeType||pipeType]}φ{pipe2.diameter}</div>
+      <div style={{fontSize:12,color:"#333",marginTop:4}}>設計H={H0}mm（大きい方のOD）／ D①={D}mm　D②={D2}mm（同一床付け、OD差分で自動）</div></div>}
     <div style={S.c}><div style={S.ch}>手入力</div>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}><div style={{flex:1,fontSize:14,fontWeight:600}}>床付幅 B</div>
         <input type="number" inputMode="decimal" style={{...S.ni,width:100}} value={design.B??""} placeholder="mm" onChange={e=>setDesign(d=>({...d,B:e.target.value}))}/></div>
@@ -952,7 +1083,7 @@ export default function App(){
         <input type="number" inputMode="decimal" style={{...S.ni,width:100}} value={design.Ba??""} placeholder="mm" onChange={e=>setDesign(d=>({...d,Ba:e.target.value}))}/></div>}</div>
     <div style={S.c}><div style={S.ch}>各層の設計厚</div>
       {steps.map(s=>{if(!s.tKey)return null;return(<div key={s.id} style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
-        <span style={S.sd}>{s.id}</span><div style={{flex:1}}><span style={{fontSize:13,fontWeight:600}}>{s.tKey}</span><span style={{fontSize:11,color:"#888",marginLeft:4}}>{s.name}</span></div>
+        <span style={S.sd}>{s.id}</span><div style={{flex:1}}><span style={{fontSize:13,fontWeight:600}}>{s.tKey}</span><span style={{fontSize:12,color:"#888",marginLeft:4}}>{s.name}</span></div>
         <input type="number" inputMode="decimal" style={{...S.ni,width:70}} value={design[s.tKey]??""} placeholder="mm" onChange={e=>setDesign(d=>({...d,[s.tKey]:e.target.value}))}/></div>);})}
     </div>
     <div style={S.c}><div style={S.ch}>各工程の設計H</div>
@@ -963,7 +1094,7 @@ export default function App(){
     <button style={S.pri} onClick={()=>{if(!points.length)setScreen("bulk");else setScreen("list");}}>{!points.length?"測点作成 →":"現場入力 →"}</button></div>);}
 
   // ═══ BULK ═══
-  if(screen==="bulk"){return(<div style={S.w}>
+  if(screen==="bulk"){return(<div style={{...S.w,zoom:fontScale}}>
     <div style={S.top}><button style={S.bk} onClick={()=>setScreen("design")}>← 設計値</button><span style={S.bg}>測点作成</span></div>
     <div style={S.c}><div style={{display:"flex",alignItems:"center",gap:12,justifyContent:"center",marginBottom:16}}>
       <button style={S.cb} onClick={()=>setBulkCount(c=>Math.max(1,c-1))}>−</button>
@@ -972,36 +1103,113 @@ export default function App(){
     <button style={S.pri} onClick={()=>{bulkCreate();setScreen("list");}}>No.1〜No.{bulkCount} を作成</button></div>);}
 
   // ═══ ENTRY ═══
-  if(screen==="entry"){return(<div style={S.w}>
+  if(screen==="entry"){
+    const doneState=(st)=>{const ph=((cur.photos&&cur.photos[st.id])||[]).length>0;if(st.photoOnly)return ph?"done":"none";const filled=st.inputs.length>0&&st.inputs.every(f=>{const v=cur.measured[`${st.id}_${f}`];return v!==undefined&&v!=="";});if(filled&&ph)return"done";if(filled||ph)return"partial";return"none";};
+    const doneN=mergedSteps.filter(st=>doneState(st)==="done").length;
+    const firstOpen=mergedSteps.findIndex(st=>doneState(st)!=="done");
+    const jumpTo=(i)=>{const el=document.getElementById(`stepcard-${i}`);if(el)el.scrollIntoView({behavior:"smooth",block:"start"});};
+    const stCol=(d)=>d==="done"?"#2E7D32":d==="partial"?"#F9A825":"#ccc";
+    return(<div style={{...S.w,zoom:fontScale}}>
     <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={onPhotoTaken}/>
     <div style={S.top}><button style={S.bk} onClick={()=>setScreen("list")}>← 戻る</button><span style={S.bg}>{cur.name}</span></div>
+    <div style={{position:"sticky",top:0,zIndex:50,background:"var(--color-background-primary,#fff)",padding:"8px 6px",marginBottom:8,borderBottom:"1px solid #e0e0e0"}}>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:15,fontWeight:700}}>完了 {doneN} / {mergedSteps.length}{firstOpen>=0&&<span style={{fontSize:12,color:"#E65100",marginLeft:8}}>次：{mergedSteps[firstOpen].name}</span>}{firstOpen<0&&<span style={{fontSize:12,color:"#2E7D32",marginLeft:8}}>全工程 完了 ✅</span>}</div>
+          <div style={{height:8,background:"#eee",borderRadius:4,marginTop:5,overflow:"hidden"}}><div style={{width:`${mergedSteps.length?Math.round(doneN/mergedSteps.length*100):0}%`,height:"100%",background:firstOpen<0?"#2E7D32":"#1565C0",transition:"width .3s"}}/></div>
+        </div>
+        <button onClick={()=>jumpTo(firstOpen<0?mergedSteps.length-1:firstOpen)} style={{...S.camBtn,padding:"9px 12px",whiteSpace:"nowrap"}}>▼ 次へ</button>
+      </div>
+      <div style={{display:"flex",gap:3,marginTop:6,flexWrap:"wrap"}}>
+        {mergedSteps.map((st,i)=>{const d=doneState(st);return(<button key={st.id} onClick={()=>jumpTo(i)} title={st.name} style={{width:14,height:14,borderRadius:3,border:"none",padding:0,background:stCol(d),cursor:"pointer",opacity:d==="none"?0.5:1}}/>);})}
+      </div>
+    </div>
     <div style={S.c}><div style={{display:"flex",gap:8}}>
       <div style={{flex:1}}><label style={S.lb}>測点</label><input style={{...S.inp,fontWeight:700,fontSize:18}} value={cur.name} onChange={e=>setCur(p=>({...p,name:e.target.value}))}/></div>
       <div style={{flex:1}}><label style={S.lb}>日付</label><input type="date" style={S.inp} value={cur.date} onChange={e=>setCur(p=>({...p,date:e.target.value}))}/></div></div></div>
-    {steps.map(step=>{
+    {mergedSteps.map((step,stepIdx)=>{
+      const photos=(cur.photos&&cur.photos[step.id])||[];
+      const seqBadge=(<span style={{fontSize:11,color:"#999",fontWeight:600,flexShrink:0}}>{stepIdx+1}/{mergedSteps.length}</span>);
+      if(step.photoOnly){
+        const done=photos.length>0;
+        return(<div key={step.id} id={`stepcard-${stepIdx}`} style={{...S.c,padding:"10px 14px",background:done?"#F1F8E9":"#FAFAF5",borderLeft:`4px solid ${done?"#2E7D32":"#FFB74D"}`,scrollMarginTop:90}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            {seqBadge}
+            <span style={{fontSize:18,width:24,textAlign:"center"}}>{done?"✅":"📷"}</span>
+            <span style={{fontSize:13,fontWeight:600,flex:1,color:done?"#2E7D32":"#333"}}>{step.name}<span style={{fontSize:12,color:"#999",marginLeft:6}}>状況写真</span></span>
+            <button onClick={()=>takePhoto(step.id)} style={S.camBtn}>📷{done?` ${photos.length}`:""}</button></div>
+          {(()=>{const spec=photoSpec(step.name);if(!spec||spec.length===0)return null;return renderFields(spec,(k)=>cur.measured[`${step.id}_f_${k}`]||"",(k,v)=>setCur(p=>({...p,measured:{...p.measured,[`${step.id}_f_${k}`]:v}})));})()}
+          {done&&(<div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
+            {photos.map((ph,pi)=>(<div key={pi} style={{position:"relative"}}>
+              <img src={ph.data} onClick={()=>setViewPhoto(ph.data)} style={{width:56,height:56,objectFit:"cover",borderRadius:8,border:"1px solid #ddd",cursor:"pointer"}}/>
+              <button onClick={()=>delPhoto(step.id,pi)} style={{position:"absolute",top:-6,right:-6,width:20,height:20,borderRadius:10,background:"#C62828",color:"#fff",border:"none",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>×</button></div>))}</div>)}
+        </div>);
+      }
       const tM=step.tKey?calcT(step,cur.measured):null;const tD=step.tKey&&design[step.tKey]?Number(design[step.tKey]):null;
       const tErr=tM!==null&&tD!==null?tM-tD:null;const tJ=tErr!==null?judge(tErr,step.tKey):null;
-      const photos=(cur.photos&&cur.photos[step.id])||[];
-      return(<div key={step.id} style={S.c}>
+      const zoneInfo=(()=>{
+        if(!step.tKey)return null;
+        const zoneOf=(s2)=>!s2.tKey?null:s2.name.includes("路盤")?"B":(s2.name.includes("発生土")||s2.name.includes("砂埋戻し"))?"A":null;
+        const zk=zoneOf(step);if(!zk)return null;
+        const zsteps=steps.filter(s2=>zoneOf(s2)===zk);
+        const idx=zsteps.indexOf(step);
+        const isLast=idx===zsteps.length-1;const remainLayers=zsteps.length-1-idx;
+        const hMraw=cur.measured[`${step.id}_H`];
+        if(hMraw===undefined||hMraw==="")return{zk,isLast,cum:null};
+        const hM=Number(hMraw);const hD=calcDesignH(step.id);
+        let cum;
+        if(zk==="A"){cum=Math.round(hD-hM);}
+        else{
+          const aSteps=steps.filter(s2=>zoneOf(s2)==="A");const lastA=aSteps[aSteps.length-1];
+          const baseRaw=lastA?cur.measured[`${lastA.id}_H`]:undefined;
+          const sumB=zsteps.slice(0,idx+1).reduce((a,s2)=>a+(Number(design[s2.tKey])||0),0);
+          cum=(baseRaw!==undefined&&baseRaw!=="")?Math.round((Number(baseRaw)-hM)-sumB):Math.round(hD-hM);
+        }
+        const taNeed=surfaceType==="asphalt"?(Number(design.ta)||40):0;
+        const need=zk==="A"?steps.filter(s2=>zoneOf(s2)==="B").reduce((a,s2)=>a+(Number(design[s2.tKey])||0),0)+taNeed:taNeed;
+        return{zk,isLast,remainLayers,cum,hM,need};
+      })();
+      const dState=doneState(step);
+      return(<div key={step.id} id={`stepcard-${stepIdx}`} style={{...S.c,borderLeft:`4px solid ${stCol(dState)}`,scrollMarginTop:90}}>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-          <span style={S.sn}>{step.id}</span><span style={{fontSize:14,fontWeight:600,flex:1}}>{step.name}</span>
+          {seqBadge}
+          <span style={S.sn}>{step.id}</span><span style={{fontSize:15,fontWeight:700,flex:1}}>{step.name}{dState==="done"&&<span style={{fontSize:12,color:"#2E7D32",marginLeft:6}}>✅</span>}{dState==="partial"&&<span style={{fontSize:11,color:"#F9A825",marginLeft:6}}>{((cur.photos&&cur.photos[step.id])||[]).length>0?"数値未入力":"写真未撮影"}</span>}</span>
           <button onClick={()=>takePhoto(step.id)} style={S.camBtn}>📷{photos.length>0?` ${photos.length}`:""}</button></div>
         {step.inputs.map(f=>{
           const d=dv(f,step.id);const key=`${step.id}_${f}`;const mv=cur.measured[key]??"";
           const err=d!==null&&mv!==""?Number(mv)-Number(d):null;const j=err!==null?judge(err,f):null;
           return(<div key={f} style={S.er}>
-            <div style={{flex:1.2}}><span style={{fontSize:16,fontWeight:700}}>{f}</span><div style={{fontSize:12,color:"#1565C0",fontWeight:600}}>{d!==null?Math.round(d):"—"}<span style={{fontSize:10,color:"#999",marginLeft:4}}>({crit(f)})</span></div></div>
+            <div style={{flex:1.2}}><span style={{fontSize:16,fontWeight:700}}>{fl(f)}</span><div style={{fontSize:12,color:"#1565C0",fontWeight:600}}>{d!==null?Math.round(d):"—"}<span style={{fontSize:12,color:"#999",marginLeft:4}}>({crit(f)})</span>{f==="H"&&step.id!==1&&!(step.tKey==="t0")&&measuredD(steps,cur.measured)!==null&&<span style={{fontSize:9,color:"#E65100",marginLeft:4}}>実測D起点</span>}</div></div>
             <div style={{flex:1.3}}><input type="number" inputMode="decimal" style={S.mi} value={mv} placeholder="実測" onChange={e=>setCur(p=>({...p,measured:{...p.measured,[key]:e.target.value}}))}/></div>
             <div style={{width:48,textAlign:"center",fontSize:14,fontWeight:700,color:err!==null?j==="×"?"#C62828":"inherit":"#ccc"}}>{err!==null?(err>0?`+${err}`:err):"—"}</div>
             <div style={{width:28,textAlign:"center",fontSize:20,fontWeight:800,color:j==="○"?"#2E7D32":j==="×"?"#C62828":"#ddd"}}>{j??"·"}</div></div>);})}
         {step.tKey&&(<div style={{marginTop:6,padding:"8px 10px",borderRadius:8,background:tJ==="○"?"#E8F5E9":tJ==="×"?"#FFEBEE":"#f5f5f5",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
           <div style={{flex:1}}><div style={{fontSize:13,fontWeight:600,color:tJ==="○"?"#2E7D32":tJ==="×"?"#C62828":"#888"}}>{step.tKey}={tM!==null?`${tM}mm`:"—"}</div>
-            <div style={{fontSize:11,color:"#999"}}>{prevLbl(step)} / 設計:{tD??"-"}mm</div></div>
+            <div style={{fontSize:12,color:"#999"}}>{prevLbl(step)} / 設計:{tD??"-"}mm</div></div>
           {tErr!==null&&<div style={{fontSize:13,fontWeight:700,color:tJ==="○"?"#2E7D32":"#C62828"}}>{tErr>0?`+${tErr}`:tErr} {tJ}</div>}</div>)}
-        {step.extra.map(ex=>{const key=`${step.id}_${ex.key}`;const mv=cur.measured[key]??"";const err=mv!==""?Number(mv)-ex.design:null;const j=err!==null?judge(err,ex.key,ex):null;
-          return(<div key={ex.key} style={{marginTop:6,padding:"8px 10px",borderRadius:8,border:"1px dashed #1565C0",display:"flex",alignItems:"center",gap:6}}>
-            <div style={{flex:1}}><div style={{fontSize:13,fontWeight:600,color:"#1565C0"}}>{ex.key} {ex.label}</div><div style={{fontSize:11,color:"#888"}}>設計:{ex.design}mm</div></div>
-            <input type="number" inputMode="decimal" style={{...S.mi,width:90}} value={mv} placeholder="実測" onChange={e=>setCur(p=>({...p,measured:{...p.measured,[key]:e.target.value}}))}/> 
+        {step.inputs.includes("D")&&(<>
+          {renderFields([{k:"トルク",t:"choice",o:["60N·m","100N·m","直管"]}],(k)=>cur.measured[`${step.id}_f_${k}`]||"",(k,v)=>setCur(p=>({...p,measured:{...p.measured,[`${step.id}_f_${k}`]:v}})))}
+          <div style={{fontSize:12,color:"#888",marginTop:2}}>異形管（継手ボルト）の時だけ60/100。直管はトルク管理なし → 「直管」を選ぶか未選択でOK</div></>)}
+        {zoneInfo&&(()=>{
+          const z=zoneInfo;const zname=z.zk==="A"?"発生土ゾーン（砂〜発生土）":"砕石ゾーン（路盤）";
+          if(z.cum===null)return(<div style={{marginTop:6,padding:"6px 10px",borderRadius:8,background:"#fafafa",fontSize:12,color:"#999"}}>{zname}：Hを入力するとゾーン累計が出ます</div>);
+          const a=Math.abs(z.cum);const lvl=a<=15?"ok":a<=30?"warn":"ng";
+          const col=lvl==="ok"?"#2E7D32":lvl==="warn"?"#E65100":"#C62828";const bg=lvl==="ok"?"#E8F5E9":lvl==="warn"?"#FFF3E0":"#FFEBEE";
+          const tag=lvl==="ok"?"順調":lvl==="warn"?"⚠ 注意":"🔴 要調整";
+          const sign=z.cum>0?`+${z.cum}`:`${z.cum}`;
+          const diff=Math.round(z.hM-z.need);const bad=Math.abs(diff)>30;
+          return(<div style={{marginTop:6,padding:"8px 10px",borderRadius:8,background:bg,border:`1px solid ${col}55`}}>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <div style={{flex:1,fontSize:12,fontWeight:700,color:col}}>{zname} 累計 {sign}mm ／ 許容±30</div>
+              <div style={{fontSize:12,fontWeight:700,color:col}}>{tag}</div></div>
+            {!z.isLast&&z.cum!==0&&<div style={{fontSize:12,color:"#555",marginTop:3}}>残り{z.remainLayers}層で {z.cum>0?"−":"+"}{a}mm 調整（1層あたり約 {z.cum>0?"−":"+"}{Math.round(a/z.remainLayers)}mm）</div>}
+            {z.isLast&&<div style={{fontSize:12,color:bad?"#C62828":"#333",marginTop:3,fontWeight:bad?700:400}}>{z.zk==="A"?"砕石ゾーンへ渡す深さ":"舗装への残り深さ"}：実測 {Math.round(z.hM)} ／ 必要 {z.need}（{diff>0?"+":""}{diff}）{bad&&z.zk==="A"&&(diff<0?" ⚠ このまま進むと路盤が薄くなります":" ⚠ 路盤が厚くなり舗装高が合いません")}{bad&&z.zk==="B"&&(diff<0?" ⚠ 舗装厚が確保できません":" ⚠ 舗装が厚くなります")}</div>}
+          </div>);})()}
+        {step.extra.map(ex=>{const av=autoExtra(ex,step,steps,cur.measured);const err=av!==null?av-ex.design:null;const j=err!==null?judge(err,ex.key,ex):null;
+          const formula=ex.key==="Dm"?"＝このH":"＝実測D①−H";
+          return(<div key={ex.key} style={{marginTop:6,padding:"8px 10px",borderRadius:8,border:"1px dashed #1565C0",background:j==="○"?"#E8F5E9":j==="×"?"#FFEBEE":"#fff",display:"flex",alignItems:"center",gap:6}}>
+            <div style={{flex:1}}><div style={{fontSize:13,fontWeight:600,color:"#1565C0"}}>{ex.key} {ex.label}<span style={{fontSize:12,color:"#888",marginLeft:4}}>自動{formula}</span></div><div style={{fontSize:12,color:"#888"}}>設計:{ex.design}mm</div></div>
+            <div style={{width:90,textAlign:"center",fontSize:16,fontWeight:700,color:av!==null?"#1565C0":"#ccc"}}>{av!==null?`${av}`:"—"}</div> 
             <div style={{width:48,textAlign:"center",fontSize:14,fontWeight:700,color:err!==null?j==="×"?"#C62828":"inherit":"#ccc"}}>{err!==null?(err>0?`+${err}`:err):"—"}</div>
             <div style={{width:28,textAlign:"center",fontSize:18,fontWeight:800,color:j==="○"?"#2E7D32":j==="×"?"#C62828":"#ddd"}}>{j??"·"}</div></div>);})}
         {photos.length>0&&(<div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
@@ -1036,35 +1244,48 @@ export default function App(){
     };
     const doneN=checkItems.filter(it=>((checkPhotos[it]||[]).length>0)).length;
     const remainN=checkItems.length-doneN;
-    return(<div style={S.w}>
+    return(<div style={{...S.w,zoom:fontScale}}>
       <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={onPhotoTaken}/>
-      <div style={S.top}><button style={S.bk} onClick={()=>setScreen(header.projectType==="simple"?"setup":"list")}>← 戻る</button><span style={S.bg}>撮影チェックリスト</span></div>
+      <div style={S.top}><button style={S.bk} onClick={()=>setScreen(header.projectType==="simple"?"setup":"list")}>← 戻る</button><span style={S.bg}>{hasAnchors?"工程リスト（順序）":"撮影チェックリスト"}</span></div>
       {checkItems.length===0?(<>
         <div style={{fontSize:12,color:"#666",padding:"0 4px",marginBottom:10}}>工事種別テンプレを選ぶと撮影リストが展開されます。撮ると自動で✓が付き、取り忘れが一目で分かります。</div>
         {!tplLoaded?(<div style={{...S.c,textAlign:"center",color:"#888"}}>テンプレート読込中…</div>):(
           templates.length===0?(<div style={{...S.c,textAlign:"center",color:"#888",fontSize:12}}>テンプレートがありません。<br/>SupabaseでSQLを実行してください。<br/>（下の「空のリストで開始」でも使えます）</div>):(
             templates.map(tpl=>(<button key={tpl.id} onClick={()=>applyTpl(tpl)} style={{...S.c,width:"100%",textAlign:"left",cursor:"pointer",border:"1px solid #ddd"}}>
               <div style={{fontSize:15,fontWeight:700}}>{tpl.name}</div>
-              <div style={{fontSize:11,color:"#888",marginTop:4}}>{(Array.isArray(tpl.items)?tpl.items:[]).length}項目：{(Array.isArray(tpl.items)?tpl.items:[]).slice(0,5).join(" / ")}{(tpl.items||[]).length>5?" …":""}</div>
+              <div style={{fontSize:12,color:"#888",marginTop:4}}>{(Array.isArray(tpl.items)?tpl.items:[]).length}項目：{(Array.isArray(tpl.items)?tpl.items:[]).slice(0,5).join(" / ")}{(tpl.items||[]).length>5?" …":""}</div>
             </button>))
           ))}
         <button style={{...S.exp,marginTop:4}} onClick={()=>setCheckItems(["着手前","完了"])}>空のリストで開始（項目は自分で追加）</button>
       </>):(<>
-        <div style={{...S.c,display:"flex",alignItems:"center",gap:10,background:remainN>0?"#FFF3E0":"#E8F5E9",border:`1px solid ${remainN>0?"#FFCC80":"#A5D6A7"}`}}>
+        {hasAnchors?(<div style={{...S.c,background:"#E3F2FD",border:"1px solid #90CAF9"}}>
+          <div style={{fontSize:13,fontWeight:700,color:"#1565C0",marginBottom:4}}>この順序で各測点の入力画面に展開されます</div>
+          <div style={{fontSize:12,color:"#555"}}>📐＝出来形工程（@で位置指定）／📷＝状況写真。撮影は各測点の画面で行います。項目の追加・削除で順序を調整できます。</div>
+          <button onClick={resetTpl} style={{...S.sm,fontSize:12,color:"#C62828",marginTop:6}}>リセット（テンプレ選び直し）</button></div>
+        ):(<div style={{...S.c,display:"flex",alignItems:"center",gap:10,background:remainN>0?"#FFF3E0":"#E8F5E9",border:`1px solid ${remainN>0?"#FFCC80":"#A5D6A7"}`}}>
           <span style={{fontSize:22}}>{remainN>0?"📷":"✅"}</span>
           <div style={{flex:1}}>
             <div style={{fontSize:15,fontWeight:700,color:remainN>0?"#E65100":"#2E7D32"}}>{remainN>0?`未撮影 ${remainN}件`:"全項目 撮影済み!"}</div>
-            <div style={{fontSize:11,color:"#888"}}>{doneN} / {checkItems.length} 完了</div></div>
-          <button onClick={resetTpl} style={{...S.sm,fontSize:11,color:"#C62828"}}>リセット</button></div>
+            <div style={{fontSize:12,color:"#888"}}>{doneN} / {checkItems.length} 完了</div></div>
+          <button onClick={resetTpl} style={{...S.sm,fontSize:12,color:"#C62828"}}>リセット</button></div>)}
         {checkItems.map(item=>{
           const photos=checkPhotos[item]||[];
           const done=photos.length>0;
+          if(hasAnchors){
+            const isA=String(item).trim().startsWith("@");
+            return(<div key={item} style={{...S.c,borderLeft:`4px solid ${isA?"#1565C0":"#FFB74D"}`,padding:"8px 14px",display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:16,width:24,textAlign:"center"}}>{isA?"📐":"📷"}</span>
+              <span style={{fontSize:13,fontWeight:600,flex:1,color:isA?"#1565C0":"#333"}}>{isA?String(item).trim().slice(1)+"（出来形）":item}</span>
+              <button onClick={()=>delItem(item)} style={{...S.sm,fontSize:12,color:"#C62828",padding:"4px 6px"}}>×</button></div>);
+          }
           return(<div key={item} style={{...S.c,borderLeft:`4px solid ${done?"#2E7D32":"#FFB74D"}`,padding:"10px 14px"}}>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
               <span style={{fontSize:18,width:24,textAlign:"center"}}>{done?"✅":"⬜"}</span>
               <span style={{fontSize:14,fontWeight:600,flex:1,color:done?"#2E7D32":"#333"}}>{item}</span>
               <button onClick={()=>takeCheckPhoto(item)} style={S.camBtn}>📷{done?` ${photos.length}`:""}</button>
               <button onClick={()=>delItem(item)} style={{...S.sm,fontSize:12,color:"#C62828",padding:"4px 6px"}}>×</button></div>
+            {(()=>{const spec=photoSpec(item);
+              if(spec===null)return(<>
             <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
               {DIM_LABELS.map(l=>{
                 const active=(checkDims[item]||{})[l]!==undefined;
@@ -1079,7 +1300,11 @@ export default function App(){
                   </div>))}
               </div>)}
             <input style={{...S.inp,marginTop:6,fontSize:13,padding:"7px 10px"}} value={checkNotes[item]||""} onChange={e=>setCheckNotes(p=>({...p,[item]:e.target.value}))} placeholder="自由入力（黒板に追記）例: 東側"/>
-            {composeNote(item)&&<div style={{fontSize:11,color:"#1565C0",marginTop:4,fontWeight:600}}>黒板: {composeNote(item)}</div>}
+              </>);
+              if(spec.length===0)return null;
+              return renderFields(spec,(k)=>(checkDims[item]||{})[k]||"",(k,v)=>setCheckDims(p=>{const n={...p};const d={...(n[item]||{})};d[k]=v;n[item]=d;return n;}));
+            })()}
+            {composeNote(item)&&<div style={{fontSize:12,color:"#1565C0",marginTop:4,fontWeight:600}}>黒板: {composeNote(item)}</div>}
             {done&&(<div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
               {photos.map((ph,pi)=>(<div key={pi} style={{position:"relative"}}>
                 <img src={ph.data} onClick={()=>setViewPhoto(ph.data)} style={{width:56,height:56,objectFit:"cover",borderRadius:8,border:"1px solid #ddd",cursor:"pointer"}}/>
@@ -1088,7 +1313,7 @@ export default function App(){
         <div style={S.c}>
           <div style={S.ch}>項目を追加</div>
           <div style={{display:"flex",gap:8}}>
-            <input style={{...S.inp,flex:1}} value={newItemName} onChange={e=>setNewItemName(e.target.value)} placeholder="例: 水圧試験"/>
+            <input style={{...S.inp,flex:1}} value={newItemName} onChange={e=>setNewItemName(e.target.value)} placeholder={hasAnchors?"例: 乳剤散布 ／ @管布設（出来形の位置）":"例: 水圧試験"}/>
             <button style={{...S.camBtn,flexShrink:0}} onClick={addItem}>+ 追加</button></div></div>
         <button style={{...S.exp,background:"#E3F2FD",color:"#1565C0",border:"1px solid #90CAF9"}} onClick={saveTpl}>このリストをテンプレとして保存（全工事で使い回し）</button>
       </>)}
@@ -1103,10 +1328,10 @@ export default function App(){
     const addPos=()=>{const n=newPosName.trim();if(!n||albumPositions.includes(n))return;setAlbumPositions(p=>[...p,n]);setNewPosName("");};
     const delPos=(pos)=>{if(albumPhotos.some(p=>p.position===pos)){if(!confirm(`「${pos}」の写真も削除されます。削除しますか?`))return;setAlbumPhotos(p=>p.filter(x=>x.position!==pos));}setAlbumPositions(p=>p.filter(x=>x!==pos));};
     const handleAlbumPDF=()=>{generateAlbumPDF({header,albumPhotos,albumPositions});setToast("写真台帳PDF出力");setTimeout(()=>setToast(""),3000);};
-    return(<div style={S.w}>
+    return(<div style={{...S.w,zoom:fontScale}}>
       <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={onPhotoTaken}/>
       <div style={S.top}><button style={S.bk} onClick={()=>setScreen("list")}>← 戻る</button><span style={S.bg}>着手前及び完成</span></div>
-      <div style={{fontSize:11,color:"#888",padding:"0 4px",marginBottom:10}}>位置ごとに着手前・完成を撮影。出来形の測点とは別に始点(0M)・終点も撮れます。</div>
+      <div style={{fontSize:12,color:"#888",padding:"0 4px",marginBottom:10}}>位置ごとに着手前・完成を撮影。出来形の測点とは別に始点(0M)・終点も撮れます。</div>
       {albumPositions.map(pos=>{
         const prePhotos=albumPhotos.filter(p=>p.position===pos&&p.phase==="pre");
         const compPhotos=albumPhotos.filter(p=>p.position===pos&&p.phase==="comp");
@@ -1141,12 +1366,12 @@ export default function App(){
 
   // ═══ LIST ═══
   const syncBadge=syncStatus==="synced"?{t:"☁ 同期済",c:"#2E7D32",bg:"#E8F5E9"}:syncStatus==="syncing"?{t:"☁ 同期中…",c:"#E65100",bg:"#FFF3E0"}:{t:"⚠ オフライン",c:"#C62828",bg:"#FFEBEE"};
-  return(<div style={S.w}>
+  return(<div style={{...S.w,zoom:fontScale}}>
     <div style={S.top}><button style={S.bk} onClick={()=>setScreen("design")}>← 設計値</button>
       <h1 style={{fontSize:16,fontWeight:700,margin:0,flex:1,textAlign:"center",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{header.projectName||"出来形管理"}</h1>
-      <span style={{fontSize:10,fontWeight:600,color:syncBadge.c,background:syncBadge.bg,padding:"3px 8px",borderRadius:10,whiteSpace:"nowrap"}}>{syncBadge.t}</span>
+      <span style={{fontSize:12,fontWeight:600,color:syncBadge.c,background:syncBadge.bg,padding:"3px 8px",borderRadius:10,whiteSpace:"nowrap"}}>{syncBadge.t}</span>
       <button style={{...S.bk,fontSize:18,padding:"4px 8px"}} onClick={()=>setShowProjList(true)} title="プロジェクト一覧">≡</button></div>
-    <div style={{display:"flex",gap:6,fontSize:11,color:"#888",padding:"0 4px",marginBottom:10,flexWrap:"wrap"}}>
+    <div style={{display:"flex",gap:6,fontSize:12,color:"#888",padding:"0 4px",marginBottom:10,flexWrap:"wrap"}}>
       <span>{PL[pipeType]}</span><span>φ{dia}</span><span>{road.label}</span><span>{steps.length}工程</span></div>
     {points.length===0?(<div style={{textAlign:"center",padding:"40px 16px",color:"#888"}}>
       <div style={{fontSize:40,marginBottom:8}}>📐</div>
@@ -1156,18 +1381,18 @@ export default function App(){
       steps.forEach(step=>{step.inputs.forEach(f=>{total++;const d=dv(f,step.id);const key=`${step.id}_${f}`;const mv=pt.measured[key];
         if(d!==null&&mv&&mv!==""){const j=judge(Number(mv)-Number(d),f);if(j==="○")ok++;if(j==="×")ng++;}});
         if(step.tKey){total++;const tM=calcT(step,pt.measured);const tD=design[step.tKey]?Number(design[step.tKey]):null;if(tM!==null&&tD!==null){const j=judge(tM-tD,step.tKey);if(j==="○")ok++;if(j==="×")ng++;}}
-        step.extra.forEach(ex=>{total++;const key=`${step.id}_${ex.key}`;const mv=pt.measured[key];if(mv&&mv!==""){const j=judge(Number(mv)-ex.design,ex.key,ex);if(j==="○")ok++;if(j==="×")ng++;}});});
+        step.extra.forEach(ex=>{total++;const av=autoExtra(ex,step,steps,pt.measured);if(av!==null){const j=judge(av-ex.design,ex.key,ex);if(j==="○")ok++;if(j==="×")ng++;}});});
       const fl=ok+ng;const pc=totalPhotos(pt);
       return(<div key={idx} style={{...S.pc,borderLeft:fl===0?"3px solid #ddd":ng>0?"3px solid #C62828":"3px solid #2E7D32"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
-            <span style={{fontSize:16,fontWeight:700}}>{pt.name}</span><span style={{fontSize:11,color:"#999"}}>{pt.date}</span>
-            {pc>0&&<span style={{fontSize:11,color:"#1565C0"}}>📷{pc}</span>}</div>
+            <span style={{fontSize:16,fontWeight:700}}>{pt.name}</span><span style={{fontSize:12,color:"#999"}}>{pt.date}</span>
+            {pc>0&&<span style={{fontSize:12,color:"#1565C0"}}>📷{pc}</span>}</div>
           <button style={{...S.sm,fontSize:14,fontWeight:700}} onClick={()=>editPoint(idx)}>入力→</button></div></div>);})}
     <div style={{display:"flex",flexDirection:"column",gap:8,marginTop:12}}>
       <button style={{...S.pri,background:"#fff",color:"#1565C0",border:"2px solid #1565C0"}} onClick={()=>setPoints(p=>[...p,{name:`No.${p.length+1}`,date:"",measured:{},photos:{}}])}>+ 測点追加</button>
       <button style={{...S.exp,background:"#FFF3E0",color:"#E65100",border:"1px solid #FFCC80"}} onClick={()=>setScreen("album")}>📷 着手前及び完成（写真台帳）</button>
-      <button style={{...S.exp,background:checkItems.length>0&&checkItems.filter(it=>!((checkPhotos[it]||[]).length>0)).length>0?"#FFEBEE":"#F5F5F5",color:checkItems.length>0&&checkItems.filter(it=>!((checkPhotos[it]||[]).length>0)).length>0?"#C62828":"#555",border:"1px solid #ddd"}} onClick={()=>setScreen("check")}>✓ 撮影チェックリスト{checkItems.length>0?(()=>{const r=checkItems.filter(it=>!((checkPhotos[it]||[]).length>0)).length;return r>0?`（未撮影 ${r}件）`:"（完了✅）";})():""}</button>
+      <button style={{...S.exp,background:!hasAnchors&&checkItems.length>0&&checkItems.filter(it=>!((checkPhotos[it]||[]).length>0)).length>0?"#FFEBEE":"#F5F5F5",color:!hasAnchors&&checkItems.length>0&&checkItems.filter(it=>!((checkPhotos[it]||[]).length>0)).length>0?"#C62828":"#555",border:"1px solid #ddd"}} onClick={()=>setScreen("check")}>{hasAnchors?"🗂 工程リスト（状況写真の順序を編集）":`✓ 撮影チェックリスト${checkItems.length>0?(()=>{const r=checkItems.filter(it=>!((checkPhotos[it]||[]).length>0)).length;return r>0?`（未撮影 ${r}件）`:"（完了✅）";})():""}`}</button>
       <button style={S.exp} onClick={handlePDF}>PDF出力（表紙+各工程）</button>
       <button style={{...S.exp,background:"#E3F2FD",color:"#1565C0",border:"1px solid #90CAF9"}} onClick={()=>{
         let csv="\uFEFF";csv+=`工事名,${header.projectName}\n\n`;csv+=`測点,工程,項目,設計,実測,誤差,判定,日付\n`;
@@ -1184,6 +1409,10 @@ export default function App(){
           <h2 style={{fontSize:18,fontWeight:700,margin:0}}>プロジェクト一覧</h2>
           <button style={{background:"none",border:"none",fontSize:24,cursor:"pointer",color:"#888",padding:"0 8px"}} onClick={()=>setShowProjList(false)}>×</button>
         </div>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,padding:"8px 10px",background:"#f5f5f5",borderRadius:8}}>
+          <span style={{fontSize:13,fontWeight:600,flex:1}}>文字サイズ</span>
+          {[["標準",1.0],["大",1.15],["特大",1.3]].map(([l,z])=>(<button key={l} onClick={()=>setZoom(z)} style={{padding:"6px 12px",borderRadius:14,border:`1.5px solid ${fontScale===z?"#1565C0":"#ccc"}`,background:fontScale===z?"#1565C0":"#fff",color:fontScale===z?"#fff":"#555",fontSize:13,fontWeight:700,cursor:"pointer"}}>{l}</button>))}
+        </div>
         <button style={{...S.pri,marginBottom:16}} onClick={newProject}>+ 新規プロジェクト</button>
         {projects.length===0?(<div style={{textAlign:"center",padding:"20px 0",color:"#888",fontSize:13}}>プロジェクトなし</div>):(
           projects.sort((a,b)=>(b.updatedAt||"").localeCompare(a.updatedAt||"")).map(pj=>{
@@ -1195,8 +1424,8 @@ export default function App(){
             return(<div key={pj.id} style={{border:isCurrent?"2px solid #1565C0":"1px solid #ddd",borderRadius:10,padding:"10px 12px",marginBottom:8,background:isCurrent?"#E3F2FD":"#fff"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:15,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nameShow}{isCurrent&&<span style={{fontSize:10,color:"#1565C0",marginLeft:6}}>（現在）</span>}</div>
-                  <div style={{fontSize:11,color:"#888",marginTop:2}}>{pipeLabel} φ{pj.header?.diameter||"—"} / {ptsN}測点 / {dt}</div>
+                  <div style={{fontSize:15,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nameShow}{isCurrent&&<span style={{fontSize:12,color:"#1565C0",marginLeft:6}}>（現在）</span>}</div>
+                  <div style={{fontSize:12,color:"#888",marginTop:2}}>{pipeLabel} φ{pj.header?.diameter||"—"} / {ptsN}測点 / {dt}</div>
                 </div>
                 <div style={{display:"flex",gap:4,flexShrink:0}}>
                   {!isCurrent&&<button style={{...S.sm,fontSize:13,background:"#E3F2FD",padding:"6px 10px",borderRadius:6}} onClick={()=>switchProject(pj.id)}>開く</button>}
@@ -1214,7 +1443,7 @@ export default function App(){
 const S={
   w:{maxWidth:540,margin:"0 auto",padding:"8px 0",fontFamily:'"Helvetica Neue","Hiragino Sans",sans-serif',color:"var(--color-text-primary,#1a1a1a)"},
   top:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,padding:"0 4px"},
-  logo:{fontSize:20,fontWeight:700,margin:0},bg:{fontSize:11,fontWeight:600,background:"#E3F2FD",color:"#1565C0",padding:"3px 10px",borderRadius:20},
+  logo:{fontSize:20,fontWeight:700,margin:0},bg:{fontSize:12,fontWeight:600,background:"#E3F2FD",color:"#1565C0",padding:"3px 10px",borderRadius:20},
   c:{background:"var(--color-background-secondary,#fafafa)",border:"0.5px solid var(--color-border-tertiary,#e0e0e0)",borderRadius:12,padding:14,marginBottom:10},
   ch:{fontSize:14,fontWeight:600,marginBottom:10},lb:{display:"block",fontSize:12,fontWeight:500,color:"#666",marginBottom:3},
   inp:{width:"100%",padding:"10px 12px",fontSize:15,border:"1px solid #ddd",borderRadius:8,background:"#fff",color:"inherit",boxSizing:"border-box",outline:"none"},
@@ -1224,15 +1453,15 @@ const S={
   rb:{flex:1,padding:"14px 12px",border:"2px solid #ddd",borderRadius:12,background:"#fff",cursor:"pointer",textAlign:"center",display:"flex",flexDirection:"column",gap:4,alignItems:"center"},rbOn:{borderColor:"#1565C0",background:"#E3F2FD",color:"#1565C0"},
   sfb:{flex:1,padding:"12px",border:"2px solid #ddd",borderRadius:12,background:"#fff",cursor:"pointer",textAlign:"center",display:"flex",flexDirection:"column",gap:2,alignItems:"center"},sfbOn:{borderColor:"#E65100",background:"#FFF3E0",color:"#E65100"},
   db:{padding:"8px 14px",border:"1.5px solid #ddd",borderRadius:10,background:"#fff",cursor:"pointer",textAlign:"center"},dbOn:{borderColor:"#1565C0",background:"#E3F2FD",color:"#1565C0"},
-  sn:{width:22,height:22,borderRadius:11,background:"#1565C0",color:"#fff",fontSize:12,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0},
-  sd:{width:20,height:20,borderRadius:10,background:"#ddd",color:"#666",fontSize:11,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0},
+  sn:{width:24,height:24,borderRadius:12,background:"#1565C0",color:"#fff",fontSize:13,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0},
+  sd:{width:20,height:20,borderRadius:10,background:"#ddd",color:"#666",fontSize:12,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0},
   er:{display:"flex",alignItems:"center",padding:"8px 0",borderBottom:"0.5px solid #eee",gap:4},
   pri:{width:"100%",padding:"14px",fontSize:16,fontWeight:700,background:"#1565C0",color:"#fff",border:"none",borderRadius:12,cursor:"pointer"},
   exp:{width:"100%",padding:"12px",fontSize:14,fontWeight:600,background:"#E8F5E9",color:"#2E7D32",border:"1px solid #A5D6A7",borderRadius:12,cursor:"pointer"},
   bk:{background:"none",border:"none",fontSize:14,color:"#1565C0",cursor:"pointer",fontWeight:500,padding:"4px 0"},
   pc:{background:"#fafafa",border:"0.5px solid #e0e0e0",borderRadius:10,padding:"10px 12px",marginBottom:6},
-  sm:{background:"none",border:"none",fontSize:13,color:"#1565C0",cursor:"pointer",fontWeight:500},
+  sm:{background:"none",border:"none",fontSize:14,color:"#1565C0",cursor:"pointer",fontWeight:500},
   cb:{width:44,height:44,borderRadius:22,border:"2px solid #1565C0",background:"#fff",color:"#1565C0",fontSize:22,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"},
   to:{position:"fixed",bottom:20,left:"50%",transform:"translateX(-50%)",background:"#333",color:"#fff",padding:"10px 24px",borderRadius:8,fontSize:14,fontWeight:500,zIndex:999},
-  camBtn:{padding:"6px 12px",border:"1.5px solid #1565C0",borderRadius:8,background:"#E3F2FD",color:"#1565C0",fontSize:13,fontWeight:600,cursor:"pointer",flexShrink:0},
+  camBtn:{padding:"7px 12px",border:"1.5px solid #1565C0",borderRadius:8,background:"#E3F2FD",color:"#1565C0",fontSize:14,fontWeight:600,cursor:"pointer",flexShrink:0},
 };
