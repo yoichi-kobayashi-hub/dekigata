@@ -81,7 +81,7 @@ function getOD(p,d){return(p==="DCIP"?OD_DCIP:p==="HPPE"?OD_HPPE:{})[d]||0;}
 function getDias(p){return p==="DCIP"?DIAS_DCIP:p==="HPPE"?DIAS_HPPE:[];}
 function calcH0(p,D,d){const od=getOD(p,d);return p==="HPPE"?D+od+100:D+od;}
 const FM={H:{label:"深さ",minus:30,plus:30},B:{label:"幅",minus:50,plus:null},Ba:{label:"舗装幅",minus:25,plus:null},D:{label:"埋設深",minus:30,plus:30},D2:{label:"埋設深②",minus:30,plus:30},ta:{label:"舗装厚",minus:7,plus:null},t0:{label:"基礎砂",minus:30,plus:30},t1:{label:"保護砂",minus:30,plus:30},t2:{label:"発生土",minus:30,plus:30},t3:{label:"発生土",minus:30,plus:30},t4:{label:"発生土",minus:30,plus:30},t5:{label:"路盤",minus:30,plus:30},t6:{label:"路盤",minus:30,plus:30},t7:{label:"路盤",minus:30,plus:30},A:{label:"弁芯距離",minus:null,plus:25},Hs:{label:"シート",minus:30,plus:30},Dm:{label:"マーカー",minus:30,plus:30}};
-const APP_VERSION="2.1.1";
+const APP_VERSION="2.1.4";
 const PL={DCIP:"DCIP(GX)",HPPE:"HPPE",SHIKIRI:"仕切弁筐"};
 // キーワード判定（URLの ?ky=shinano でも解除。一度解除した端末は記憶）
 function kwOk(v){const t=String(v||"").trim();return t.toLowerCase()==="shinano"||t==="信濃";}
@@ -93,9 +93,9 @@ const ZONE_A=["t1","t2","t3","t4"],ZONE_B=["t5","t6","t7"];
 // 状況写真の記入項目（項目名の部分一致で決定。該当なし=null→汎用チップ、fields空=📷のみ）
 const MACHINE_OPTS=["0.1㎥","0.14㎥","0.2㎥","0.25㎥"];
 const PHOTO_FIELDS=[
-  {match:"剥ぎ取り",fields:[{k:"機械",t:"choice",o:MACHINE_OPTS}]},
+  {match:"剥ぎ取り",fields:[]},
   {match:"掘削状況",fields:[{k:"機械",t:"choice",o:MACHINE_OPTS}]},
-  {match:"路盤厚",fields:[{k:"厚さH",t:"num",u:"mm"}]},
+  {match:"路盤厚",fields:[{k:"As厚",t:"num",u:"mm"},{k:"路盤厚",t:"num",u:"mm"},{k:"合計",t:"sum",of:["As厚","路盤厚"],u:"mm"}]},
   {match:"管布設",fields:[{k:"管径",t:"auto"},{k:"トルク",t:"choice",o:["60N·m","100N·m","直管"]}]},
   {match:"発生土転圧",fields:[{k:"層",t:"choice",o:["①","②","③"]}]},
   {match:"砕石転圧",fields:[{k:"層",t:"choice",o:["①","②"]}]},
@@ -126,13 +126,34 @@ function breakLines(ctx,text,maxW,maxLines){
   }
   return wrapCanvas(ctx,t,maxW,maxLines);
 }
-function fieldPairs(spec,get,autoVal){return (spec||[]).map(f=>{if(f.t==="auto")return[f.k,autoVal(f.k)];const v=get(f.k);return(v!==undefined&&v!==null&&String(v).trim()!=="")?[f.k,`${v}${f.u||""}`]:null;}).filter(Boolean);}
+function sumField(f,get){const vs=(f.of||[]).map(k=>get(k));if(!vs.length||!vs.every(v=>v!==undefined&&v!==null&&String(v).trim()!==""&&!isNaN(Number(v))))return null;return Math.round(vs.reduce((a,v)=>a+Number(v),0)*10)/10;}
+function fieldPairs(spec,get,autoVal){return (spec||[]).map(f=>{if(f.t==="auto")return[f.k,autoVal(f.k)];if(f.t==="sum"){const sm=sumField(f,get);return sm===null?null:[f.k,`${sm}${f.u||""}`];}const v=get(f.k);return(v!==undefined&&v!==null&&String(v).trim()!=="")?[f.k,`${v}${f.u||""}`]:null;}).filter(Boolean);}
 // 測点の実測D①（主管）。埋戻し以降の設計H起点に使う（未入力ならnull→設計D起点）
 function measuredD(steps,measured){const ps=steps.find(s=>s.inputs.includes("D"));if(!ps||!measured)return null;const v=measured[`${ps.id}_D`];if(v===undefined||v===""||isNaN(Number(v)))return null;return Number(v);}
 // t自動計算: 前工程H（最初は実測D）− 今工程H
 function calcTm(step,steps,meas){if(!step||!step.tKey||step.prevRef===null||step.prevRef===undefined||!meas)return null;let pv;if(step.prevRef==="D"){const ds=steps.find(s=>s.inputs.includes("D"));pv=ds?meas[`${ds.id}_D`]:null;}else pv=meas[`${step.prevRef}_H`];const ch=meas[`${step.id}_H`];if(pv===undefined||pv===null||pv===""||ch===undefined||ch===null||ch==="")return null;return Number(pv)-Number(ch);}
 // Hs/Dm 自動計算: シート・ピンは発生土①天端 → Dm=そのH, Hs=実測D①−H
 function autoExtra(ex,step,steps,meas){if(!ex||!step||!meas)return null;const h=meas[`${step.id}_H`];if(h===undefined||h===""||isNaN(Number(h)))return null;if(ex.key==="Dm")return Math.round(Number(h));if(ex.key==="Hs"){const dm=measuredD(steps,meas);if(dm===null)return null;return Math.round(dm-Number(h));}const v=meas[`${step.id}_${ex.key}`];return(v===undefined||v==="")?null:Number(v);}
+// 設計H（全画面・黒板・PDF共通）
+//  掘削=H0／基礎砂=H0−t0／砂〜発生土=実測D①(未入力なら設計D)−累計t
+//  路盤砕石=地表基準：舗装厚ta＋その上に残る路盤厚（最終の路盤＝舗装厚）
+//  発生土の最終層=舗装厚＋路盤全厚（砕石ゾーンへの引き渡し。Dのズレは発生土で吸収）
+function isRobanStep(s){return !!(s&&s.tKey&&String(s.name||"").includes("路盤"));}
+function surfaceRefKind(step,steps){if(!step||!step.tKey)return null;const robans=steps.filter(isRobanStep);if(!robans.length)return null;const ri=robans.findIndex(x=>x.id===step.id);if(ri>=0)return ri===robans.length-1?"ta":"ta+roban";const fills=steps.filter(x=>x.tKey&&x.tKey!=="t0"&&!isRobanStep(x));if(fills.length&&fills[fills.length-1].id===step.id)return "handoff";return null;}
+function designHFor(step,steps,design,H0,D,measured,surfaceType){
+  if(!step)return null;
+  if(step.id===1)return H0;
+  const bs=steps.find(x=>x.tKey==="t0");if(bs&&step.id===bs.id)return H0-(Number(design.t0)||0);
+  const taD=surfaceType==="gravel"?0:(Number(design.ta)||40);
+  const robans=steps.filter(isRobanStep);
+  const kind=surfaceRefKind(step,steps);
+  if(kind==="ta"||kind==="ta+roban"){const ri=robans.findIndex(x=>x.id===step.id);return Math.round(taD+robans.slice(ri+1).reduce((acc,x)=>acc+(Number(design[x.tKey])||0),0));}
+  if(kind==="handoff")return Math.round(taD+robans.reduce((acc,x)=>acc+(Number(design[x.tKey])||0),0));
+  const dm=measuredD(steps,measured);
+  let h=dm!==null?dm:D;let ap=false;
+  for(const x of steps){if(x.inputs.includes("D")){ap=true;continue;}if(!ap)continue;if(typeof x.id==="number"&&typeof step.id==="number"&&x.id>step.id)break;if(x.tKey&&x.tKey!=="t0"&&design[x.tKey])h-=Number(design[x.tKey]);}
+  return Math.round(h);
+}
 function judge(e,f,m){const meta=m||FM[f];if(!meta||e===null||isNaN(e))return null;if(meta.minus!==null&&e<-meta.minus)return"×";if(meta.plus!==null&&e>meta.plus)return"×";return"○";}
 function today(){const d=new Date();return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
 function nowTime(){return new Date().toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"});}
@@ -416,10 +437,10 @@ td,th{border:0.5px solid #333;padding:3px 5px;font-size:12px;vertical-align:midd
     return s;
   };
 
-  const designHOf=(step,pt)=>{if(step.id===1)return H0;const bStep=steps.find(s=>s.tKey==="t0");if(bStep&&step.id===bStep.id)return H0-(Number(design.t0)||0);const dmP=measuredD(steps,pt.measured);let hh=dmP!==null?dmP:D;let ap=false;for(const s2 of steps){if(s2.inputs.includes("D")){ap=true;continue;}if(!ap)continue;if(typeof s2.id==="number"&&s2.id>step.id)break;if(s2.tKey&&s2.tKey!=="t0"&&design[s2.tKey])hh-=Number(design[s2.tKey]);}return Math.round(hh);};
+  const designHOf=(step,pt)=>designHFor(step,steps,design,H0,D,pt.measured,surfaceType);
   const boardLines=(step,pt)=>{
     const L=[];
-    L.push(["工事名",header.projectName||""]);L.push(["分類",step.photoOnly?"施工状況":"出来形管理"]);L.push(["測点",pt.name||""]);
+    L.push(["工事名",header.projectName||""]);L.push(["分類",mode==="status"?"施工状況":(step.photoOnly?"施工状況":"出来形管理")]);L.push(["測点",pt.name||""]);
     L.push(["工程",step.photoOnly?step.name:`${step.id}.${step.name}`]);
     L.push(["管種",pipeText(pipeType,dia,pipe2)]);
     if(step.photoOnly){const spec=photoSpec(step.name);if(spec){fieldPairs(spec,(k)=>pt.measured[`${step.id}_f_${k}`],(k)=>k==="管径"?(pipe2?`φ${dia}+φ${pipe2.diameter}`:`φ${dia}`):"").forEach(([k,v])=>L.push([k,v]));}}
@@ -1031,14 +1052,7 @@ export default function App(){
   const rebuild=(p,r,sf)=>{const st=getSteps(p,r,sf,ROADS.find(x=>x.key===r).D);setDesign(d=>({...getDefaults(st),B:d.B||"",Ba:d.Ba||""}));setPoints([]);};
   if(!inited&&loaded&&currentProjId&&!projects.find(p=>p.id===currentProjId)){rebuild("DCIP","shidou","asphalt");setInited(true);}
 
-  const calcDesignH=(sid,measured)=>{
-    if(sid===1)return H0;const bStep=steps.find(s=>s.tKey==="t0");
-    if(bStep&&sid===bStep.id)return H0-(Number(design.t0)||0);
-    const dm=measuredD(steps,measured||cur.measured);
-    let h=dm!==null?dm:D;let ap=false;
-    for(const s of steps){if(s.inputs.includes("D")){ap=true;continue;}if(!ap)continue;if(s.id>sid)break;if(s.tKey&&s.tKey!=="t0"&&design[s.tKey])h-=Number(design[s.tKey]);}
-    return Math.round(h);
-  };
+  const calcDesignH=(sid,measured)=>designHFor(steps.find(s=>s.id===sid),steps,design,H0,D,measured||cur.measured,surfaceType);
   const dv=(f,sid)=>{if(f==="H")return calcDesignH(sid);if(f==="B")return design.B?Number(design.B):null;if(f==="Ba")return design.Ba?Number(design.Ba):null;if(f==="D")return D;if(f==="D2")return D2;if(f==="ta")return Number(design.ta)||40;return design[f]?Number(design[f]):null;};
   const calcT=(step,meas)=>calcTm(step,steps,meas);
   const prevLbl=(step)=>{if(!step.prevRef)return"";if(step.prevRef==="D"){const ds=steps.find(s=>s.inputs.includes("D"));return`D(${ds?.id})−H(${step.id})`;}return`H(${step.prevRef})−H(${step.id})`;};
@@ -1066,7 +1080,9 @@ export default function App(){
       if(f.t==="auto")return(<div key={f.k} style={{fontSize:12,color:"#1565C0",fontWeight:600}}>{f.k}：{autoFieldVal(f.k)}<span style={{fontSize:12,color:"#888",marginLeft:4}}>（設定から自動）</span></div>);
       if(f.t==="choice")return(<div key={f.k} style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}><span style={{fontSize:12,fontWeight:700,minWidth:40}}>{f.k}</span>
         {f.o.map(o=>{const on=get(f.k)===o;return(<button key={o} onClick={()=>set(f.k,on?"":o)} style={{padding:"6px 12px",borderRadius:14,border:`1.5px solid ${on?"#1565C0":"#ccc"}`,background:on?"#1565C0":"#fff",color:on?"#fff":"#555",fontSize:13,fontWeight:700,cursor:"pointer"}}>{o}</button>);})}</div>);
-      if(f.t==="num")return(<div key={f.k} style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:12,fontWeight:700,minWidth:40}}>{f.k}</span>
+      if(f.t==="sum"){const sm=sumField(f,get);return(<div key={f.k} style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:12,fontWeight:700,minWidth:44}}>{f.k}</span>
+        <span style={{width:96,textAlign:"right",fontSize:17,fontWeight:800,color:sm!==null?"#1565C0":"#bbb",padding:"7px 8px"}}>{sm!==null?sm:"—"}</span><span style={{fontSize:11,color:"#888"}}>{f.u||""}（自動）</span></div>);}
+      if(f.t==="num")return(<div key={f.k} style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:12,fontWeight:700,minWidth:44}}>{f.k}</span>
         <input inputMode="decimal" style={{...S.inp,width:96,textAlign:"right",fontSize:16,fontWeight:700,padding:"7px 8px"}} value={get(f.k)||""} onChange={e=>set(f.k,e.target.value.replace(/[^0-9.\-]/g,""))} placeholder="0"/><span style={{fontSize:12,color:"#888"}}>{f.u||""}</span></div>);
       return null;})}
   </div>);
@@ -1258,13 +1274,13 @@ export default function App(){
           const step=mergedSteps.find(s=>s.id===photoStep)||steps.find(s=>s.id===photoStep);
           const lines=[];
           if(header.projectName)lines.push(["工事名",header.projectName]);
-          lines.push(["分類",step.photoOnly?"施工状況":"出来形管理"]);
+          lines.push(["分類",step.photoOnly?"施工状況":"出来形管理・施工状況"]);
           lines.push(["測点",cur.name||""]);
           lines.push(["工程",step.photoOnly?step.name:`${step.id}.${step.name}`]);
           if(step.photoOnly){const spec=photoSpec(step.name);if(spec)fieldPairs(spec,(k)=>cur.measured[`${step.id}_f_${k}`],autoFieldVal).forEach(([k,v])=>lines.push([k,v]));}
           lines.push(["管種",pipeText(pipeType,dia,pipe2)]);
           if(!step.photoOnly){
-            const hVal=(()=>{if(step.id===1)return H0;const bs=steps.find(s=>s.tKey==="t0");if(bs&&step.id===bs.id)return H0-(Number(design.t0)||0);const dmB=measuredD(steps,cur.measured);let h=dmB!==null?dmB:D;let a=false;for(const x of steps){if(x.inputs.includes("D")){a=true;continue;}if(!a)continue;if(x.id>step.id)break;if(x.tKey&&x.tKey!=="t0"&&design[x.tKey])h-=Number(design[x.tKey]);}return h;})();
+            const hVal=designHFor(steps.find(x=>x.id===step.id)||step,steps,design,H0,D,cur.measured,surfaceType);
             const mvB=(f)=>{const v=cur.measured[`${step.id}_${f}`];return(v===undefined||v==="")?null:Number(v);};
             const dl=(lbl,dsg,f)=>{const m=mvB(f);if(m!==null&&dsg!==null&&dsg!==""){const j=judge(m-Number(dsg),f)||"";lines.push([lbl,`設${dsg} 実${m}${j}`]);}else lines.push([lbl,`設計${dsg!==null&&dsg!==""?dsg:"—"}`]);};
             if(step.inputs.includes("H"))dl("H",hVal,"H");
@@ -1546,7 +1562,7 @@ export default function App(){
           const d=dv(f,step.id);const key=`${step.id}_${f}`;const mv=cur.measured[key]??"";
           const err=d!==null&&mv!==""?Number(mv)-Number(d):null;const j=err!==null?judge(err,f):null;
           return(<div key={f} style={S.er}>
-            <div style={{flex:1.2}}><span style={{fontSize:16,fontWeight:700}}>{fl(f)}</span><div style={{fontSize:12,color:"#1565C0",fontWeight:600}}>{d!==null?Math.round(d):"—"}<span style={{fontSize:12,color:"#999",marginLeft:4}}>({crit(f)})</span>{f==="H"&&step.id!==1&&!(step.tKey==="t0")&&measuredD(steps,cur.measured)!==null&&<span style={{fontSize:9,color:"#E65100",marginLeft:4}}>実測D起点</span>}</div></div>
+            <div style={{flex:1.2}}><span style={{fontSize:16,fontWeight:700}}>{fl(f)}</span><div style={{fontSize:12,color:"#1565C0",fontWeight:600}}>{d!==null?Math.round(d):"—"}<span style={{fontSize:12,color:"#999",marginLeft:4}}>({crit(f)})</span>{f==="H"&&step.id!==1&&!(step.tKey==="t0")&&(()=>{const k=surfaceRefKind(steps.find(x=>x.id===step.id)||step,steps);if(k==="ta")return(<span style={{fontSize:11,color:"#1565C0",marginLeft:4,fontWeight:700}}>＝舗装厚</span>);if(k==="ta+roban")return(<span style={{fontSize:11,color:"#1565C0",marginLeft:4,fontWeight:700}}>＝舗装厚＋路盤</span>);if(k==="handoff")return(<span style={{fontSize:11,color:"#1565C0",marginLeft:4,fontWeight:700}}>＝舗装厚＋路盤全厚</span>);return measuredD(steps,cur.measured)!==null?(<span style={{fontSize:11,color:"#E65100",marginLeft:4}}>実測D起点</span>):null;})()}</div></div>
             <div style={{flex:1.3}}><input type="number" inputMode="decimal" style={S.mi} value={mv} placeholder="実測" onChange={e=>setCur(p=>({...p,measured:{...p.measured,[key]:e.target.value}}))}/></div>
             <div style={{width:48,textAlign:"center",fontSize:14,fontWeight:700,color:err!==null?j==="×"?"#C62828":"inherit":"#ccc"}}>{err!==null?(err>0?`+${err}`:err):"—"}</div>
             <div style={{width:28,textAlign:"center",fontSize:20,fontWeight:800,color:j==="○"?"#2E7D32":j==="×"?"#C62828":"#ddd"}}>{j??"·"}</div></div>);})}
