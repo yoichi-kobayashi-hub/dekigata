@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 
 const OD_DCIP={75:93.0,100:118.0,150:169.0,200:220.0,250:271.6,300:322.8,400:425.6};
 const OD_HPPE={75:89.0,100:114.0,150:165.0};
@@ -80,7 +81,7 @@ function getOD(p,d){return(p==="DCIP"?OD_DCIP:p==="HPPE"?OD_HPPE:{})[d]||0;}
 function getDias(p){return p==="DCIP"?DIAS_DCIP:p==="HPPE"?DIAS_HPPE:[];}
 function calcH0(p,D,d){const od=getOD(p,d);return p==="HPPE"?D+od+100:D+od;}
 const FM={H:{label:"深さ",minus:30,plus:30},B:{label:"幅",minus:50,plus:null},Ba:{label:"舗装幅",minus:25,plus:null},D:{label:"埋設深",minus:30,plus:30},D2:{label:"埋設深②",minus:30,plus:30},ta:{label:"舗装厚",minus:7,plus:null},t0:{label:"基礎砂",minus:30,plus:30},t1:{label:"保護砂",minus:30,plus:30},t2:{label:"発生土",minus:30,plus:30},t3:{label:"発生土",minus:30,plus:30},t4:{label:"発生土",minus:30,plus:30},t5:{label:"路盤",minus:30,plus:30},t6:{label:"路盤",minus:30,plus:30},t7:{label:"路盤",minus:30,plus:30},A:{label:"弁芯距離",minus:null,plus:25},Hs:{label:"シート",minus:30,plus:30},Dm:{label:"マーカー",minus:30,plus:30}};
-const APP_VERSION="2.1.0";
+const APP_VERSION="2.1.1";
 const PL={DCIP:"DCIP(GX)",HPPE:"HPPE",SHIKIRI:"仕切弁筐"};
 // キーワード判定（URLの ?ky=shinano でも解除。一度解除した端末は記憶）
 function kwOk(v){const t=String(v||"").trim();return t.toLowerCase()==="shinano"||t==="信濃";}
@@ -710,6 +711,8 @@ export default function App(){
   const[photoStep,setPhotoStep]=useState(null);
   const[pendingShot,setPendingShot]=useState(null);
   const[previewZoom,setPreviewZoom]=useState(false);
+  const[vp,setVp]=useState(()=>({w:window.innerWidth,h:window.innerHeight}));
+  useEffect(()=>{const on=()=>setVp({w:window.innerWidth,h:window.innerHeight});const onOri=()=>{on();setTimeout(on,350);};window.addEventListener("resize",on);window.addEventListener("orientationchange",onOri);return()=>{window.removeEventListener("resize",on);window.removeEventListener("orientationchange",onOri);};},[]);
   const[albumTarget,setAlbumTarget]=useState(null);
   const[albumPhotos,setAlbumPhotos]=useState([]);
   const[albumPositions,setAlbumPositions]=useState(["始点","中間点","終点"]);
@@ -1083,33 +1086,75 @@ export default function App(){
     else if(t.kind==="album"){setAlbumPhotos(p=>[...p,{...rec,phase:t.album.phase,position:t.album.position}]);}
     else{const sid=t.photoStep;setCur(p=>{const ph={...(p.photos||{})};ph[sid]=[...(ph[sid]||[]),rec];const ds={...(p.dates||{})};if(!ds[sid])ds[sid]=today();return{...p,photos:ph,dates:ds,date:p.date||today()};});}
   };
+  useEffect(()=>{if(!pendingShot)return;const o=document.body.style.overflow;document.body.style.overflow="hidden";return()=>{document.body.style.overflow=o;};},[!!pendingShot]);
   const saveShot=()=>{const ps=pendingShot;if(!ps||!ps.data)return;applyShot(ps.tgt,ps.data);setPendingShot(null);setToast("保存しました");setTimeout(()=>setToast(""),1800);};
   const retakeShot=()=>{setPendingShot(null);if(fileRef.current){fileRef.current.value="";fileRef.current.click();}};
   const cancelShot=()=>{setPendingShot(null);};
-  const shotPreview=pendingShot?(<div style={{position:"fixed",inset:0,background:"#111",zIndex:10000,display:"flex",flexDirection:"column"}}>
-    <div style={{color:"#fff",fontSize:15,fontWeight:700,textAlign:"center",padding:"10px 8px 6px",flexShrink:0}}>{pendingShot.loading?"黒板を合成中…":`確認：${pendingShot.label||""}`}</div>
-    <div style={{flex:1,minHeight:0,overflow:"auto",WebkitOverflowScrolling:"touch",padding:"0 6px"}}>
-      {pendingShot.loading?(<div style={{color:"#aaa",fontSize:14,textAlign:"center",paddingTop:"30vh"}}>少々お待ちください</div>):(<>
-        <div onClick={()=>setPreviewZoom(z=>!z)} style={{overflow:"auto",WebkitOverflowScrolling:"touch",borderRadius:6}}>
-          <img src={pendingShot.data} style={{width:previewZoom?"260%":"100%",maxWidth:"none",display:"block"}}/>
+  // 確認画面: 端末と向きでレイアウト切替（iPhone縦=写真+黒板拡大／iPhone横=左右／タブレット=写真1枚）
+  const shotPreview=(()=>{
+    if(!pendingShot)return null;
+    const isTablet=Math.min(vp.w,vp.h)>=600;const isLand=vp.w>vp.h;
+    const mode=isTablet?"tablet":(isLand?"phoneLand":"phonePort");
+    const ov={position:"fixed",inset:0,background:"#111",zIndex:10000,display:"flex",WebkitTextSizeAdjust:"100%",fontFamily:'"Helvetica Neue","Hiragino Sans",sans-serif'};
+    const title=pendingShot.loading?"黒板を合成中…":`確認：${pendingShot.label||""}`;
+    const btnRow=(compact)=>(<div style={{display:"flex",gap:compact?8:10}}>
+      <button onClick={retakeShot} style={{flex:1,padding:compact?"11px 6px":"15px",fontSize:compact?15:17,fontWeight:700,borderRadius:12,border:"2px solid #fff",background:"transparent",color:"#fff",cursor:"pointer"}}>↺ 撮り直す</button>
+      <button onClick={saveShot} style={{flex:1.4,padding:compact?"11px 6px":"15px",fontSize:compact?16:18,fontWeight:800,borderRadius:12,border:"none",background:"#2E7D32",color:"#fff",cursor:"pointer"}}>✓ 保存する</button></div>);
+    const cancelBtn=(compact)=>(<button onClick={cancelShot} style={{width:"100%",marginTop:compact?4:6,padding:compact?"6px":"8px",fontSize:compact?12:14,borderRadius:10,border:"none",background:"transparent",color:"#aaa",cursor:"pointer"}}>やめる（保存しない）</button>);
+    const fitImg=(src,extra)=>(<img src={src} style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain",display:"block",borderRadius:6,...(extra||{})}}/>);
+    const zoomPane=(<div style={{width:"100%",height:"100%",overflow:"auto",WebkitOverflowScrolling:"touch"}} onClick={()=>setPreviewZoom(false)}><img src={pendingShot.data} style={{width:"250%",maxWidth:"none",display:"block"}}/></div>);
+    let body;
+    if(pendingShot.loading){
+      body=(<div style={{...ov,flexDirection:"column",alignItems:"center",justifyContent:"center",color:"#ccc",fontSize:15}}>{title}<div style={{fontSize:12,color:"#888",marginTop:6}}>少々お待ちください</div></div>);
+    }else if(mode==="tablet"){
+      // タブレット: 写真1枚を画面いっぱい（スクロールなし）
+      body=(<div style={{...ov,flexDirection:"column"}}>
+        <div style={{color:"#fff",fontSize:17,fontWeight:700,textAlign:"center",padding:"12px 10px 8px",flexShrink:0}}>{title}</div>
+        <div style={{flex:1,minHeight:0,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 12px"}} onClick={()=>{if(!previewZoom)setPreviewZoom(true);}}>
+          {previewZoom?zoomPane:fitImg(pendingShot.data)}
         </div>
-        <div style={{color:"#9e9e9e",fontSize:11,textAlign:"right",padding:"3px 2px 8px"}}>{previewZoom?"タップで元に戻す":"写真をタップで拡大"}</div>
-        {pendingShot.boardData&&(<>
-          <div style={{color:"#f5f5dc",fontSize:13,fontWeight:700,padding:"2px 2px 6px"}}>▼ 黒板（拡大）</div>
-          <img src={pendingShot.boardData} style={{width:"100%",display:"block",borderRadius:6,border:"2px solid #f5f5dc"}}/>
-        </>)}
-        <div style={{height:8}}/>
-      </>)}
-    </div>
-    {!pendingShot.loading&&(<div style={{flexShrink:0,padding:"8px 10px calc(10px + env(safe-area-inset-bottom,0px))",background:"#111",borderTop:"1px solid #333"}}>
-      <div style={{color:"#ccc",fontSize:12,textAlign:"center",paddingBottom:8}}>黒板の工程・数値・日付を確認して保存</div>
-      <div style={{display:"flex",gap:10}}>
-        <button onClick={retakeShot} style={{flex:1,padding:"15px",fontSize:17,fontWeight:700,borderRadius:12,border:"2px solid #fff",background:"transparent",color:"#fff",cursor:"pointer"}}>↺ 撮り直す</button>
-        <button onClick={saveShot} style={{flex:1.4,padding:"15px",fontSize:18,fontWeight:800,borderRadius:12,border:"none",background:"#2E7D32",color:"#fff",cursor:"pointer"}}>✓ 保存する</button>
-      </div>
-      <button onClick={cancelShot} style={{width:"100%",marginTop:6,padding:"8px",fontSize:14,borderRadius:10,border:"none",background:"transparent",color:"#aaa",cursor:"pointer"}}>やめる（保存しない）</button>
-    </div>)}
-  </div>):null;
+        <div style={{flexShrink:0,padding:"10px 16px calc(12px + env(safe-area-inset-bottom,0px))",maxWidth:720,width:"100%",margin:"0 auto",boxSizing:"border-box"}}>
+          <div style={{color:"#ccc",fontSize:13,textAlign:"center",paddingBottom:8}}>黒板の工程・数値・日付を確認して保存{previewZoom?"（タップで元に戻す）":"（写真タップで拡大）"}</div>
+          {btnRow(false)}{cancelBtn(false)}
+        </div>
+      </div>);
+    }else if(mode==="phoneLand"){
+      // iPhone横: 左=写真全体／右=黒板拡大＋ボタン（スクロールなし）
+      body=(<div style={{...ov,flexDirection:"row"}}>
+        <div style={{flex:"1 1 58%",minWidth:0,display:"flex",alignItems:"center",justifyContent:"center",padding:"6px 6px 6px calc(6px + env(safe-area-inset-left,0px))"}} onClick={()=>{if(!previewZoom)setPreviewZoom(true);}}>
+          {previewZoom?zoomPane:fitImg(pendingShot.data)}
+        </div>
+        <div style={{flex:"0 0 42%",minWidth:0,display:"flex",flexDirection:"column",padding:"6px calc(8px + env(safe-area-inset-right,0px)) calc(4px + env(safe-area-inset-bottom,0px)) 4px",boxSizing:"border-box"}}>
+          <div style={{color:"#fff",fontSize:13,fontWeight:700,padding:"2px 0 4px",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",flexShrink:0}}>{title}</div>
+          <div style={{flex:1,minHeight:0,display:"flex",alignItems:"center",justifyContent:"center",paddingBottom:6}}>
+            {pendingShot.boardData?fitImg(pendingShot.boardData,{border:"2px solid #f5f5dc"}):fitImg(pendingShot.data)}
+          </div>
+          <div style={{flexShrink:0}}>{btnRow(true)}{cancelBtn(true)}</div>
+        </div>
+      </div>);
+    }else{
+      // iPhone縦: 写真全体＋黒板拡大（スクロール）
+      body=(<div style={{...ov,flexDirection:"column"}}>
+        <div style={{color:"#fff",fontSize:15,fontWeight:700,textAlign:"center",padding:"10px 8px 6px",flexShrink:0}}>{title}</div>
+        <div style={{flex:1,minHeight:0,overflow:"auto",WebkitOverflowScrolling:"touch",padding:"0 6px"}}>
+          <div onClick={()=>setPreviewZoom(z=>!z)} style={{overflow:"auto",WebkitOverflowScrolling:"touch",borderRadius:6}}>
+            <img src={pendingShot.data} style={{width:previewZoom?"260%":"100%",maxWidth:"none",display:"block"}}/>
+          </div>
+          <div style={{color:"#9e9e9e",fontSize:11,textAlign:"right",padding:"3px 2px 8px"}}>{previewZoom?"タップで元に戻す":"写真をタップで拡大"}</div>
+          {pendingShot.boardData&&(<>
+            <div style={{color:"#f5f5dc",fontSize:13,fontWeight:700,padding:"2px 2px 6px"}}>▼ 黒板（拡大）</div>
+            <img src={pendingShot.boardData} style={{width:"100%",display:"block",borderRadius:6,border:"2px solid #f5f5dc"}}/>
+          </>)}
+          <div style={{height:8}}/>
+        </div>
+        <div style={{flexShrink:0,padding:"8px 10px calc(10px + env(safe-area-inset-bottom,0px))",borderTop:"1px solid #333"}}>
+          <div style={{color:"#ccc",fontSize:12,textAlign:"center",paddingBottom:8}}>黒板の工程・数値・日付を確認して保存</div>
+          {btnRow(false)}{cancelBtn(false)}
+        </div>
+      </div>);
+    }
+    return createPortal(body,document.body);
+  })();
   const takePhoto=(stepId)=>{setAlbumTarget(null);setCheckTarget(null);setPhotoStep(stepId);if(fileRef.current){fileRef.current.value="";fileRef.current.click();}};
   const takeAlbumPhoto=(phase,position)=>{setPhotoStep(null);setCheckTarget(null);setAlbumTarget({phase,position});if(fileRef.current){fileRef.current.value="";fileRef.current.click();}};
   const takeCheckPhoto=(item)=>{setPhotoStep(null);setAlbumTarget(null);setCheckTarget(item);if(fileRef.current){fileRef.current.value="";fileRef.current.click();}};
