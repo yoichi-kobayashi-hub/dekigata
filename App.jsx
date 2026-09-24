@@ -80,8 +80,13 @@ function getOD(p,d){return(p==="DCIP"?OD_DCIP:p==="HPPE"?OD_HPPE:{})[d]||0;}
 function getDias(p){return p==="DCIP"?DIAS_DCIP:p==="HPPE"?DIAS_HPPE:[];}
 function calcH0(p,D,d){const od=getOD(p,d);return p==="HPPE"?D+od+100:D+od;}
 const FM={H:{label:"深さ",minus:30,plus:30},B:{label:"幅",minus:50,plus:null},Ba:{label:"舗装幅",minus:25,plus:null},D:{label:"埋設深",minus:30,plus:30},D2:{label:"埋設深②",minus:30,plus:30},ta:{label:"舗装厚",minus:7,plus:null},t0:{label:"基礎砂",minus:30,plus:30},t1:{label:"保護砂",minus:30,plus:30},t2:{label:"発生土",minus:30,plus:30},t3:{label:"発生土",minus:30,plus:30},t4:{label:"発生土",minus:30,plus:30},t5:{label:"路盤",minus:30,plus:30},t6:{label:"路盤",minus:30,plus:30},t7:{label:"路盤",minus:30,plus:30},A:{label:"弁芯距離",minus:null,plus:25},Hs:{label:"シート",minus:30,plus:30},Dm:{label:"マーカー",minus:30,plus:30}};
-const APP_VERSION="2.0.3";
-const PL={DCIP:"DCIP",HPPE:"HPPE",SHIKIRI:"仕切弁筐"};
+const APP_VERSION="2.0.9";
+const PL={DCIP:"DCIP(GX)",HPPE:"HPPE",SHIKIRI:"仕切弁筐"};
+// キーワード判定（URLの ?ky=shinano でも解除。一度解除した端末は記憶）
+function kwOk(v){const t=String(v||"").trim();return t.toLowerCase()==="shinano"||t==="信濃";}
+function initialLocked(){try{const q=new URLSearchParams(window.location.search);for(const [k,v] of q.entries()){if(["ky","key"].includes(k.toLowerCase())&&kwOk(v)){try{localStorage.setItem("dekigata_unlocked","1");}catch(e){}return false;}}if(localStorage.getItem("dekigata_unlocked")==="1")return false;}catch(e){}return true;}
+function nextPointName(points){const nums=(points||[]).map(p=>{const m=String(p&&p.name||"").match(/^No\.?\s*(\d+)/i);return m?Number(m[1]):null;}).filter(n=>n!==null);return `No.${nums.length?Math.max(...nums)+1:0}`;}
+function pipeText(pipeType,dia,pipe2){if(!pipe2)return`${PL[pipeType]} φ${dia}`;const t2=pipe2.pipeType||pipeType;if(t2===pipeType&&Number(pipe2.diameter)===Number(dia))return`${PL[pipeType]} φ${dia}×2条`;return`${PL[pipeType]}φ${dia}+${PL[t2]}φ${pipe2.diameter}`;}
 const DIM_LABELS=["深さ","幅","厚さ","延長","高さ","径"];
 const ZONE_A=["t1","t2","t3","t4"],ZONE_B=["t5","t6","t7"];
 // 状況写真の記入項目（項目名の部分一致で決定。該当なし=null→汎用チップ、fields空=📷のみ）
@@ -97,6 +102,29 @@ const PHOTO_FIELDS=[
   {match:"ポリスリーブ",fields:[]},{match:"砂埋戻し転圧",fields:[]},{match:"乳剤",fields:[]},{match:"舗装完了",fields:[]},{match:"表示シート",fields:[]},
 ];
 function photoSpec(name){const n=String(name||"");if(/転圧/.test(n)&&/[①②③④⑤]/.test(n))return[];const hit=PHOTO_FIELDS.find(p=>n.includes(p.match));return hit?hit.fields:null;}
+// キャンバス用の文字折り返し（日本語は1文字単位）。maxLinesを超えたら末尾を…に
+function wrapCanvas(ctx,text,maxW,maxLines){
+  const chars=Array.from(String(text||""));const out=[];let buf="";let i=0;
+  for(;i<chars.length;i++){const ch=chars[i];
+    if(buf&&ctx.measureText(buf+ch).width>maxW){out.push(buf);buf="";if(out.length===maxLines)break;}
+    buf+=ch;}
+  if(out.length<maxLines){if(buf||!out.length)out.push(buf);}
+  else if(i<chars.length){let last=out[maxLines-1];while(last.length&&ctx.measureText(last+"…").width>maxW)last=last.slice(0,-1);out[maxLines-1]=last+"…";}
+  return out;
+}
+// 工事名向け: 「年度」「地区」「工事」などの切れ目で、なるべく左右均等に2行へ
+function breakLines(ctx,text,maxW,maxLines){
+  const t=String(text||"");
+  if(ctx.measureText(t).width<=maxW)return[t];
+  if(maxLines>=2){
+    const toks=["年度","地区","工区","工事","線"];const cands=new Set();
+    toks.forEach(k=>{let i=t.indexOf(k);while(i>=0){cands.add(i+k.length);i=t.indexOf(k,i+1);}});
+    let best=null;
+    [...cands].filter(c=>c>0&&c<t.length).forEach(c=>{const a=t.slice(0,c),b=t.slice(c);if(ctx.measureText(a).width<=maxW&&ctx.measureText(b).width<=maxW){const sc=Math.abs(a.length-b.length);if(!best||sc<best.sc)best={sc,lines:[a,b]};}});
+    if(best)return best.lines;
+  }
+  return wrapCanvas(ctx,t,maxW,maxLines);
+}
 function fieldPairs(spec,get,autoVal){return (spec||[]).map(f=>{if(f.t==="auto")return[f.k,autoVal(f.k)];const v=get(f.k);return(v!==undefined&&v!==null&&String(v).trim()!=="")?[f.k,`${v}${f.u||""}`]:null;}).filter(Boolean);}
 // 測点の実測D①（主管）。埋戻し以降の設計H起点に使う（未入力ならnull→設計D起点）
 function measuredD(steps,measured){const ps=steps.find(s=>s.inputs.includes("D"));if(!ps||!measured)return null;const v=measured[`${ps.id}_D`];if(v===undefined||v===""||isNaN(Number(v)))return null;return Number(v);}
@@ -189,7 +217,7 @@ td,th{border:0.5px solid #333;padding:3px 5px;font-size:12px;vertical-align:midd
     html+=`<td class="seal">総括監督員<div class="seal-box"></div></td><td class="seal">主任監督員<div class="seal-box"></div></td><td class="seal">監督員<div class="seal-box"></div></td></tr>`;
     html+=`<tr><td class="lbl">工事箇所</td><td colspan="7">${header.location||""}</td></tr>`;
     html+=`<tr><td class="lbl">工　　種</td><td colspan="7">配管工</td></tr>`;
-    html+=`<tr><td class="lbl">種　　別</td><td colspan="4">${PL[pipeType]} φ${dia}</td><td class="lbl" style="font-size:6px">主任技術者</td><td colspan="2"></td></tr></table>`;
+    html+=`<tr><td class="lbl">種　　別</td><td colspan="4">${pipeText(pipeType,dia,pipe2)}</td><td class="lbl" style="font-size:6px">主任技術者</td><td colspan="2"></td></tr></table>`;
 
     // SVG豆図生成
     const ls=pipeType==="HPPE"
@@ -390,9 +418,9 @@ td,th{border:0.5px solid #333;padding:3px 5px;font-size:12px;vertical-align:midd
   const designHOf=(step,pt)=>{if(step.id===1)return H0;const bStep=steps.find(s=>s.tKey==="t0");if(bStep&&step.id===bStep.id)return H0-(Number(design.t0)||0);const dmP=measuredD(steps,pt.measured);let hh=dmP!==null?dmP:D;let ap=false;for(const s2 of steps){if(s2.inputs.includes("D")){ap=true;continue;}if(!ap)continue;if(typeof s2.id==="number"&&s2.id>step.id)break;if(s2.tKey&&s2.tKey!=="t0"&&design[s2.tKey])hh-=Number(design[s2.tKey]);}return Math.round(hh);};
   const boardLines=(step,pt)=>{
     const L=[];
-    L.push(["工事名",header.projectName||""]);L.push(["測点",pt.name||""]);
+    L.push(["工事名",header.projectName||""]);L.push(["分類",step.photoOnly?"施工状況":"出来形管理"]);L.push(["測点",pt.name||""]);
     L.push(["工程",step.photoOnly?step.name:`${step.id}.${step.name}`]);
-    L.push(["管種",pipe2?`${PL[pipeType]}φ${dia}+${PL[pipe2.pipeType||pipeType]}φ${pipe2.diameter}`:`${PL[pipeType]} φ${dia}`]);
+    L.push(["管種",pipeText(pipeType,dia,pipe2)]);
     if(step.photoOnly){const spec=photoSpec(step.name);if(spec){fieldPairs(spec,(k)=>pt.measured[`${step.id}_f_${k}`],(k)=>k==="管径"?(pipe2?`φ${dia}+φ${pipe2.diameter}`:`φ${dia}`):"").forEach(([k,v])=>L.push([k,v]));}}
     else{
       const mv=(f)=>{const v=pt.measured[`${step.id}_${f}`];return(v===undefined||v==="")?null:Number(v);};
@@ -414,7 +442,7 @@ td,th{border:0.5px solid #333;padding:3px 5px;font-size:12px;vertical-align:midd
   const perPage=3;
   points.forEach(pt=>{
     for(let sIdx=0;sIdx<sheetSteps.length;sIdx+=perPage){
-      html+=`<div class="step-page"><div class="step-hdr"><span>${pt.name} — ${mode==="status"?"施工状況写真":"出来形管理写真"}</span><span style="font-size:10px;color:#888">${PL[pipeType]} φ${dia} ${road.label}　${pt.date||""}</span></div>`;
+      html+=`<div class="step-page"><div class="step-hdr"><span>${pt.name} — ${mode==="status"?"施工状況写真":"出来形管理写真"}</span><span style="font-size:10px;color:#888">${pipeText(pipeType,dia,pipe2)} ${road.label}　${pt.date||""}</span></div>`;
       for(let i=0;i<perPage&&sIdx+i<sheetSteps.length;i++){
         const step=sheetSteps[sIdx+i];
         const stepPhotos=(pt.photos&&pt.photos[step.id])||[];
@@ -431,7 +459,7 @@ td,th{border:0.5px solid #333;padding:3px 5px;font-size:12px;vertical-align:midd
         if(step.photoOnly){
           html+=`<div class="step-card"><div class="step-photo">${photoContent}</div><div class="step-mz">${mkStepMz(step,pt)}</div><div class="step-info">`;
           html+=`<div class="step-title">${step.name}</div>`;
-          html+=`<div style="font-size:11px;color:#666">状況写真</div>`;
+          html+=`<div style="font-size:11px;color:#666">施工状況</div>`;
           {const spec=photoSpec(step.name);if(spec&&spec.length){const av=(k)=>k==="管径"?(pipe2?`φ${dia}+φ${pipe2.diameter}`:`φ${dia}`):"";const prs=fieldPairs(spec,(k)=>pt.measured[`${step.id}_f_${k}`],av);if(prs.length)html+=`<div style="font-size:11px;margin-top:3px">${prs.map(([k,v])=>`${k}：<b>${v}</b>`).join("　")}</div>`;}}
           html+=`<div style="font-size:10px;color:#888;margin-top:auto">${((pt.dates||{})[step.id])||pt.date||""}</div>`;
           html+=`</div></div>`;
@@ -602,7 +630,7 @@ async function sbInsertProject(id,name,data){
     body:JSON.stringify({id,name,data,updated_at:new Date().toISOString()})});
   if(res.status===409)return{conflict:true};
   if(!res.ok)throw new Error("insert failed");
-  const rows=await res.json();return{ok:true,row:rows[0]};
+  const rows=await res.json();if(!rows||rows.length===0)return{deleted:true};return{ok:true,row:rows[0]};
 }
 // 3wayマージ: 自分がbase（読んだ時点）から変えた項目だけをcloudに重ねる。写真は両方残す
 function mergeProjectData(local,cloud,base){
@@ -626,6 +654,12 @@ function mergeProjectData(local,cloud,base){
     checkNotes:mergeObj(l.checkNotes,c.checkNotes,b.checkNotes),checkDims:mergeObj(l.checkDims,c.checkDims,b.checkDims),
   };
 }
+async function sbFetchDeleted(){const res=await fetch(`${SB_URL}/rest/v1/dekigata_deleted?select=id`,{headers:sbHeaders});if(!res.ok)throw new Error("deleted fetch failed");const rows=await res.json();return new Set(rows.map(r=>r.id));}
+function getPendingDel(){try{return JSON.parse(localStorage.getItem("dekigata_pending_del")||"[]");}catch(e){return[];}}
+function setPendingDel(a){try{localStorage.setItem("dekigata_pending_del",JSON.stringify(a||[]));}catch(e){}}
+async function flushPendingDeletes(){const pend=getPendingDel();if(!pend.length)return;const left=[];for(const id of pend){try{const ok=await sbDeleteProject(id);if(!ok)left.push(id);}catch(e){left.push(id);}}setPendingDel(left);}
+// 名前も測点も写真もない工事はクラウドに送らない（空の工事が量産されないように）
+function isEmptyProject(d){d=d||{};if(d.header&&String(d.header.projectName||"").trim())return false;if((d.points||[]).length)return false;if((d.albumPhotos||[]).length)return false;if(Object.values(d.checkPhotos||{}).some(a=>(a||[]).length))return false;return true;}
 async function sbDeleteProject(id){
   const res=await fetch(`${SB_URL}/rest/v1/dekigata_projects?id=eq.${id}`,{method:"DELETE",headers:sbHeaders});
   return res.ok;
@@ -655,7 +689,7 @@ async function sbSaveTemplate(name,items){
 
 // ═══════════════════════════════════════
 export default function App(){
-  const[locked,setLocked]=useState(true);
+  const[locked,setLocked]=useState(initialLocked);
   const[keyword,setKeyword]=useState("");
   const[kwError,setKwError]=useState(false);
   const[screen,setScreen]=useState("setup");
@@ -674,6 +708,7 @@ export default function App(){
   const[camStep,setCamStep]=useState(null);
   const fileRef=useRef(null);
   const[photoStep,setPhotoStep]=useState(null);
+  const[pendingShot,setPendingShot]=useState(null);
   const[albumTarget,setAlbumTarget]=useState(null);
   const[albumPhotos,setAlbumPhotos]=useState([]);
   const[albumPositions,setAlbumPositions]=useState(["始点","中間点","終点"]);
@@ -693,6 +728,7 @@ export default function App(){
   const[currentProjId,setCurrentProjId]=useState(null);
   const[loaded,setLoaded]=useState(false);
   const[showProjList,setShowProjList]=useState(false);
+  const[delMode,setDelMode]=useState(false);const[delSel,setDelSel]=useState([]);
   const[syncStatus,setSyncStatus]=useState("init");
   const syncTimer=useRef(null);
   const projToData=(p)=>{const{id,updatedAt,...rest}=p;return rest;};
@@ -716,28 +752,33 @@ export default function App(){
   // 起動時: Supabase優先で読み込み、オフライン時はlocalStorage
   useEffect(()=>{
     (async()=>{
-      let cloudOk=false;let cloudProjects=[];
+      let cloudOk=false;let cloudProjects=[];let deleted=new Set();
+      try{await flushPendingDeletes();}catch(e){}
       try{
         const rows=await sbFetchProjects();
         cloudProjects=rows.map(r=>({id:r.id,...(r.data||{}),updatedAt:r.updated_at}));
         cloudOk=true;
       }catch(e){console.warn("cloud fetch failed",e);}
+      try{deleted=await sbFetchDeleted();}catch(e){}
+      getPendingDel().forEach(id=>deleted.add(id));
       let local=[];
       try{const raw=localStorage.getItem("dekigata_projects");if(raw)local=JSON.parse(raw);}catch(e){}
+      local=(local||[]).filter(lp=>lp&&!deleted.has(lp.id));
       if(cloudOk){
-        // 圏外で編集済み(localDirty)のプロジェクトはローカル版を優先（開いた時にクラウドとマージ保存される）
+        cloudProjects=cloudProjects.filter(c=>!deleted.has(c.id));
         for(const lp of local){
-          if(lp.localDirty){const ci=cloudProjects.findIndex(c=>c.id===lp.id);if(ci>=0){cloudProjects[ci]={...lp};}}
-        }
-        // ローカルのみのプロジェクトをクラウドへ移行
-        for(const lp of local){
-          const exists=cloudProjects.find(c=>c.id===lp.id);
-          if(!exists){
-            const nid=String(lp.id).startsWith("p_")?genUUID():lp.id;
-            const proj={...lp,id:nid};
-            cloudProjects.push(proj);
-            sbUpsertProject(nid,proj.header?.projectName||"",projToData(proj)).catch(()=>{});
-          }
+          const ci=cloudProjects.findIndex(c=>c.id===lp.id);
+          // 圏外で編集済み(localDirty)はローカル版を優先（開いた時にクラウドとマージ保存される）
+          if(ci>=0){if(lp.localDirty)cloudProjects[ci]={...lp};continue;}
+          // クラウドに無い工事：未送信（圏外で作成・編集）だけ送る。
+          // 送信済みなのにクラウドに無い＝他の端末で削除された → 復活させない（2026/9/23 22:53 の件）
+          const legacy=String(lp.id).startsWith("p_");
+          if(!lp.localDirty&&!legacy)continue;
+          const nid=legacy?genUUID():lp.id;
+          const proj={...lp,id:nid,localDirty:true};
+          cloudProjects.push(proj);
+          const{localDirty:_ld,...pd0}=proj;const pd=projToData(pd0);
+          if(!isEmptyProject(pd))sbInsertProject(nid,(proj.header&&proj.header.projectName)||"",pd).then(r=>{if(r&&r.deleted){setProjects(prev=>{const next=prev.filter(p=>p.id!==nid);try{localStorage.setItem("dekigata_projects",JSON.stringify(next));}catch(e){}return next;});}}).catch(()=>{});
         }
         setProjects(cloudProjects);
         setSyncStatus("synced");
@@ -747,7 +788,7 @@ export default function App(){
         setSyncStatus("offline");
       }
       const cid=localStorage.getItem("dekigata_currentId");
-      if(cid)setCurrentProjId(cid);
+      if(cid&&!deleted.has(cid))setCurrentProjId(cid);
       setLoaded(true);
     })();
   },[]);
@@ -797,15 +838,17 @@ export default function App(){
       if(fl.changed){applyData(work);}
       if(JSON.stringify(work).length>2500000){setSyncStatus("offline");setToast(`写真${fl.remain}枚が未送信（電波を確認）`);setTimeout(()=>setToast(""),3000);return;}
       let local=fl.changed?work:stateRef.current;let snap=snapRef.current;
+      if(!snap.updatedAt&&isEmptyProject(local)){setSyncStatus("synced");return;}
       for(let attempt=0;attempt<3;attempt++){
         const name=(local.header&&local.header.projectName)||"";
         let r;
         if(snap.updatedAt)r=await sbConditionalUpdate(id,name,local,snap.updatedAt);
         else r=await sbInsertProject(id,name,local);
         if(r.ok){snapRef.current={updatedAt:r.row.updated_at,data:local};dirtyRef.current=false;lastAppliedRef.current=JSON.stringify(normData(local));mirrorLocal(id,local,r.row.updated_at,false);setSyncStatus("synced");return;}
+        if(r.deleted){handleRemoteDeleted();return;}
         // 衝突: クラウドの最新を取ってマージ
         const cloudRow=await sbFetchProject(id);
-        if(!cloudRow){const ins=await sbInsertProject(id,name,local);if(ins.ok){snapRef.current={updatedAt:ins.row.updated_at,data:local};dirtyRef.current=false;lastAppliedRef.current=JSON.stringify(normData(local));mirrorLocal(id,local,ins.row.updated_at,false);setSyncStatus("synced");return;}continue;}
+        if(!cloudRow){const ins=await sbInsertProject(id,name,local);if(ins.ok){snapRef.current={updatedAt:ins.row.updated_at,data:local};dirtyRef.current=false;lastAppliedRef.current=JSON.stringify(normData(local));mirrorLocal(id,local,ins.row.updated_at,false);setSyncStatus("synced");return;}if(ins.deleted){handleRemoteDeleted();return;}continue;}
         const merged=mergeProjectData(local,cloudRow.data||{},snap.data||{});
         applyData(merged);
         snapRef.current={updatedAt:cloudRow.updated_at,data:cloudRow.data||{}};
@@ -835,7 +878,12 @@ export default function App(){
     if(!loaded||!currentProjId||screen==="entry")return;
     try{
       const row=await sbFetchProject(currentProjId);
-      if(!row)return;
+      if(!row){
+        let del=new Set();try{del=await sbFetchDeleted();}catch(e){}
+        if(del.has(currentProjId)){handleRemoteDeleted();return;}
+        if(dirtyRef.current&&syncSaveRef.current)syncSaveRef.current();
+        return;
+      }
       if(row.updated_at===snapRef.current.updatedAt){if(dirtyRef.current&&syncSaveRef.current)syncSaveRef.current();return;}
       if(dirtyRef.current){
         const merged=mergeProjectData(stateRef.current,row.data||{},snapRef.current.data||{});
@@ -851,13 +899,35 @@ export default function App(){
       }
     }catch(e){}
   };
+  // 一覧をクラウドと突き合わせ（他端末で作った工事が出る／削除された工事が消える）
+  const reconcileRef=useRef(null);
+  reconcileRef.current=async()=>{
+    if(!loaded)return;
+    try{
+      await flushPendingDeletes();
+      const rows=await sbFetchProjects();
+      let deleted=new Set();try{deleted=await sbFetchDeleted();}catch(e){}
+      getPendingDel().forEach(id=>deleted.add(id));
+      const cloud=rows.filter(r=>!deleted.has(r.id)).map(r=>({id:r.id,...(r.data||{}),updatedAt:r.updated_at}));
+      const cloudIds=new Set(cloud.map(c=>c.id));
+      setProjects(prev=>{
+        const prevMap=new Map(prev.map(p=>[p.id,p]));
+        const out=cloud.map(c=>{const lp=prevMap.get(c.id);return(lp&&(lp.localDirty||lp.id===currentProjId))?lp:c;});
+        prev.forEach(lp=>{if(cloudIds.has(lp.id)||deleted.has(lp.id))return;if(lp.localDirty||lp.id===currentProjId)out.push(lp);});
+        try{localStorage.setItem("dekigata_projects",JSON.stringify(out));}catch(e){}
+        return out;
+      });
+      if(currentProjId&&deleted.has(currentProjId))handleRemoteDeleted();
+    }catch(e){}
+  };
+  useEffect(()=>{if(showProjList){setDelMode(false);setDelSel([]);if(reconcileRef.current)reconcileRef.current();}},[showProjList]);
   useEffect(()=>{
-    const onVis=()=>{if(document.visibilityState==="visible"&&refreshRef.current)refreshRef.current();};
+    const onVis=()=>{if(document.visibilityState==="visible"){if(refreshRef.current)refreshRef.current();if(reconcileRef.current)reconcileRef.current();}};
     const onOnline=()=>{if(dirtyRef.current&&syncSaveRef.current)syncSaveRef.current();else if(refreshRef.current)refreshRef.current();};
     document.addEventListener("visibilitychange",onVis);window.addEventListener("focus",onVis);window.addEventListener("online",onOnline);
     return()=>{document.removeEventListener("visibilitychange",onVis);window.removeEventListener("focus",onVis);window.removeEventListener("online",onOnline);};
   },[]);
-  useEffect(()=>{if(screen==="list"&&refreshRef.current)refreshRef.current();},[screen]);
+  useEffect(()=>{if(screen==="list"){if(refreshRef.current)refreshRef.current();if(reconcileRef.current)reconcileRef.current();}},[screen]);
 
   // 初期プロジェクト作成 or 既存ロード
   useEffect(()=>{
@@ -902,18 +972,43 @@ export default function App(){
     setShowProjList(false);setScreen("setup");
     setToast("プロジェクト切替");setTimeout(()=>setToast(""),2000);
   };
-  const deleteProject=(id)=>{
-    if(!confirm("このプロジェクトを削除しますか?"))return;
-    sbDeleteProject(id).catch(()=>{});
-    setProjects(prev=>{
-      const next=prev.filter(p=>p.id!==id);
-      try{localStorage.setItem("dekigata_projects",JSON.stringify(next));}catch(e){}
-      if(id===currentProjId){
-        if(next.length>0){setCurrentProjId(next[0].id);localStorage.setItem("dekigata_currentId",next[0].id);}
-        else{resetSync();const nid=genUUID();setCurrentProjId(nid);localStorage.setItem("dekigata_currentId",nid);setHeader({projectName:"",location:"",diameter:150,projectType:""});setDesign({});setPoints([]);setAlbumPhotos([]);setAlbumPositions(["始点","中間点","終点"]);setCheckItems([]);setCheckPhotos({});setCheckNotes({});setCheckDims({});setInited(false);}
-      }
-      return next;
-    });
+  const startBlankState=()=>{setHeader({projectName:"",location:"",diameter:150,projectType:""});setDesign({});setPoints([]);setAlbumPhotos([]);setAlbumPositions(["始点","中間点","終点"]);setCheckItems([]);setCheckPhotos({});setCheckNotes({});setCheckDims({});setInited(false);};
+  const switchAwayFrom=(removedIds)=>{
+    if(syncTimer.current)clearTimeout(syncTimer.current);
+    const remaining=projects.filter(p=>!removedIds.has(p.id));
+    resetSync();startBlankState();
+    if(remaining.length>0){const latest=[...remaining].sort((a,b)=>(b.updatedAt||"").localeCompare(a.updatedAt||""))[0];setCurrentProjId(latest.id);try{localStorage.setItem("dekigata_currentId",latest.id);}catch(e){}}
+    else{const nid=genUUID();setCurrentProjId(nid);try{localStorage.setItem("dekigata_currentId",nid);}catch(e){}}
+    setScreen("setup");
+  };
+  // 開いていた工事が他の端末で削除されていた時
+  const handleRemoteDeleted=()=>{
+    const id=currentProjId;if(!id)return;
+    try{if(dirtyRef.current){const o=JSON.parse(localStorage.getItem("dekigata_orphans")||"[]");o.unshift({id,savedAt:new Date().toISOString(),data:stateRef.current});localStorage.setItem("dekigata_orphans",JSON.stringify(o.slice(0,5)));}}catch(e){}
+    setProjects(prev=>{const next=prev.filter(p=>p.id!==id);try{localStorage.setItem("dekigata_projects",JSON.stringify(next));}catch(e){}return next;});
+    switchAwayFrom(new Set([id]));
+    setToast("この工事は他の端末で削除されました");setTimeout(()=>setToast(""),3500);
+  };
+  const deleteProjects=async(ids)=>{
+    const idset=new Set(ids);const fail=[];
+    for(const id of ids){let ok=false;try{ok=await sbDeleteProject(id);}catch(e){}if(!ok)fail.push(id);}
+    if(fail.length){const a=getPendingDel();fail.forEach(id=>{if(!a.includes(id))a.push(id);});setPendingDel(a);}
+    setProjects(prev=>{const next=prev.filter(p=>!idset.has(p.id));try{localStorage.setItem("dekigata_projects",JSON.stringify(next));}catch(e){}return next;});
+    if(idset.has(currentProjId))switchAwayFrom(idset);
+    return{n:ids.length,pend:fail.length};
+  };
+  const deleteProject=async(id)=>{
+    const pj=projects.find(p=>p.id===id);
+    if(!confirm(`「${(pj&&pj.header&&pj.header.projectName)||"(名称未設定)"}」を削除しますか?\n全端末から消えます。`))return;
+    const r=await deleteProjects([id]);
+    setToast(r.pend?"削除しました（電波が戻ったらクラウドからも消します）":"削除しました");setTimeout(()=>setToast(""),2500);
+  };
+  const bulkDelete=async()=>{
+    if(!delSel.length)return;
+    if(!confirm(`チェックした${delSel.length}件を削除しますか?\n全端末から消えます。`))return;
+    const r=await deleteProjects(delSel);
+    setDelSel([]);setDelMode(false);
+    setToast(`${r.n}件削除しました${r.pend?`（${r.pend}件は電波復帰後にクラウドから削除）`:""}`);setTimeout(()=>setToast(""),3000);
   };
 
   const road=ROADS.find(r=>r.key===roadType);
@@ -947,7 +1042,7 @@ export default function App(){
   const selPipe=(k)=>{setPipeType(k);const ds=getDias(k);if(ds.length&&!ds.includes(header.diameter))setHeader(h=>({...h,diameter:ds[0]}));rebuild(k,roadType,surfaceType);};
   const selRoad=(k)=>{setRoadType(k);rebuild(pipeType,k,surfaceType);};
   const selSurface=(k)=>{setSurfaceType(k);rebuild(pipeType,roadType,k);};
-  const bulkCreate=()=>{const pts=[];for(let i=1;i<=bulkCount;i++)pts.push({name:`No.${i}`,date:"",measured:{},photos:{}});setPoints(pts);};
+  const bulkCreate=()=>{const pts=[];for(let i=0;i<bulkCount;i++)pts.push({name:`No.${i}`,date:"",measured:{},photos:{},dates:{}});setPoints(pts);};
   const editPoint=(i)=>{const p=JSON.parse(JSON.stringify(points[i]));if(!p.photos)p.photos={};setCur(p);setEditIdx(i);setScreen("entry");};
   const savePoint=()=>{if(editIdx!==null)setPoints(p=>{const n=[...p];n[editIdx]={...cur};return n;});setScreen("list");};
   // 測点編集中は cur の変更を即 points に反映（=自動保存→クラウドへ）。保存ボタン待ちで消える事故を構造で防ぐ
@@ -980,11 +1075,36 @@ export default function App(){
     if(free)parts.push(free);
     return parts.join(" ");
   };
+  // 保存: 写真をいったん端末内データで反映 → 自動同期が倉庫(Storage)へ送ってURLに置き換える
+  const applyShot=(t,data)=>{
+    const rec={id:genUUID(),data,time:nowTime()};
+    if(t.kind==="check"){setCheckPhotos(p=>({...p,[t.checkTarget]:[...(p[t.checkTarget]||[]),{...rec,note:t.note}]}));}
+    else if(t.kind==="album"){setAlbumPhotos(p=>[...p,{...rec,phase:t.album.phase,position:t.album.position}]);}
+    else{const sid=t.photoStep;setCur(p=>{const ph={...(p.photos||{})};ph[sid]=[...(ph[sid]||[]),rec];const ds={...(p.dates||{})};if(!ds[sid])ds[sid]=today();return{...p,photos:ph,dates:ds,date:p.date||today()};});}
+  };
+  const saveShot=()=>{const ps=pendingShot;if(!ps||!ps.data)return;applyShot(ps.tgt,ps.data);setPendingShot(null);setToast("保存しました");setTimeout(()=>setToast(""),1800);};
+  const retakeShot=()=>{setPendingShot(null);if(fileRef.current){fileRef.current.value="";fileRef.current.click();}};
+  const cancelShot=()=>{setPendingShot(null);};
+  const shotPreview=pendingShot?(<div style={{position:"fixed",inset:0,background:"#111",zIndex:10000,display:"flex",flexDirection:"column",padding:"12px 12px calc(12px + env(safe-area-inset-bottom,0px))"}}>
+    <div style={{color:"#fff",fontSize:15,fontWeight:700,textAlign:"center",padding:"6px 0 10px"}}>{pendingShot.loading?"黒板を合成中…":`確認：${pendingShot.label||""}`}</div>
+    <div style={{flex:1,minHeight:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      {pendingShot.loading?(<div style={{color:"#aaa",fontSize:14}}>少々お待ちください</div>):(<img src={pendingShot.data} style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain",borderRadius:8}}/>)}
+    </div>
+    {!pendingShot.loading&&(<>
+      <div style={{color:"#ccc",fontSize:12,textAlign:"center",padding:"8px 0"}}>黒板の工程・数値・日付を確認して保存</div>
+      <div style={{display:"flex",gap:10}}>
+        <button onClick={retakeShot} style={{flex:1,padding:"16px",fontSize:17,fontWeight:700,borderRadius:12,border:"2px solid #fff",background:"transparent",color:"#fff",cursor:"pointer"}}>↺ 撮り直す</button>
+        <button onClick={saveShot} style={{flex:1.4,padding:"16px",fontSize:18,fontWeight:800,borderRadius:12,border:"none",background:"#2E7D32",color:"#fff",cursor:"pointer"}}>✓ 保存する</button>
+      </div>
+      <button onClick={cancelShot} style={{marginTop:10,padding:"10px",fontSize:14,borderRadius:10,border:"none",background:"transparent",color:"#aaa",cursor:"pointer"}}>やめる（保存しない）</button>
+    </>)}
+  </div>):null;
   const takePhoto=(stepId)=>{setAlbumTarget(null);setCheckTarget(null);setPhotoStep(stepId);if(fileRef.current){fileRef.current.value="";fileRef.current.click();}};
   const takeAlbumPhoto=(phase,position)=>{setPhotoStep(null);setCheckTarget(null);setAlbumTarget({phase,position});if(fileRef.current){fileRef.current.value="";fileRef.current.click();}};
   const takeCheckPhoto=(item)=>{setPhotoStep(null);setAlbumTarget(null);setCheckTarget(item);if(fileRef.current){fileRef.current.value="";fileRef.current.click();}};
   const onPhotoTaken=(e)=>{
     const file=e.target.files?.[0];if(!file||(photoStep===null&&!albumTarget&&!checkTarget))return;
+    setPendingShot({loading:true});
     const reader=new FileReader();
     reader.onload=(ev)=>{
       const img=new Image();
@@ -995,106 +1115,98 @@ export default function App(){
         const ctx=canvas.getContext("2d");
         ctx.drawImage(img,0,0,canvas.width,canvas.height);
         const cw=canvas.width,chh=canvas.height;
-        // 黒板（写真の約1/6、左下に配置）
-        const bbW=Math.round(cw*0.32);
-        const bbH=Math.round(chh*0.30);
+        // 黒板（左下）。内容量に合わせて高さ可変、工事名などは2行まで折り返し
+        const FF=`"Hiragino Sans","MS Gothic",sans-serif`;
+        const u=Math.min(cw,chh);
+        const bbW=Math.round(Math.min(cw*0.45,Math.max(cw*0.32,u*0.43)));
         const bbX=Math.round(cw*0.02);
-        const bbY=chh-bbH-Math.round(chh*0.02);
-        ctx.fillStyle="#0a4d2e";ctx.fillRect(bbX,bbY,bbW,bbH);
-        ctx.strokeStyle="#f5f5dc";ctx.lineWidth=Math.max(2,bbW*0.006);
-        ctx.strokeRect(bbX+3,bbY+3,bbW-6,bbH-6);
-        ctx.fillStyle="#f5f5dc";
         const pad=Math.round(bbW*0.04);
-        if(checkTarget){
-          // ── チェックリスト用 表組み黒板（中央=項目名） ──
-          const lw=Math.max(1.5,bbW*0.004);
-          ctx.strokeStyle="#f5f5dc";ctx.lineWidth=lw;
-          const rowH=Math.round(bbH*0.13);
-          const labelW=Math.round(bbW*0.24);
-          const rows=[["工事件名",header.projectName||""],["分　類","工事写真"],["工　種",`${header.workKind||""}${header.diameter?` φ${header.diameter}`:""}`.trim()],["場　所",header.location||""]];
-          let ry=bbY+3;
-          const fsL=Math.round(rowH*0.42);const fsV=Math.round(rowH*0.46);
-          rows.forEach(([k,v])=>{
-            ctx.strokeRect(bbX+3,ry,labelW,rowH);
-            ctx.strokeRect(bbX+3+labelW,ry,bbW-6-labelW,rowH);
-            ctx.font=`bold ${fsL}px "Hiragino Sans","MS Gothic",sans-serif`;
-            ctx.fillText(k,bbX+3+Math.round(labelW*0.08),ry+rowH*0.66);
-            ctx.font=`bold ${fsV}px "Hiragino Sans","MS Gothic",sans-serif`;
-            let vv=String(v);
-            const maxW=bbW-6-labelW-pad;
-            while(vv&&ctx.measureText(vv).width>maxW)vv=vv.slice(0,-1);
-            ctx.fillText(vv,bbX+3+labelW+Math.round(pad*0.6),ry+rowH*0.66);
-            ry+=rowH;
-          });
-          const centerY=ry+(bbY+bbH-ry)/2;
-          let bigFs=Math.round(bbH*0.13);
-          ctx.textAlign="center";
-          ctx.font=`bold ${bigFs}px "Hiragino Sans","MS Gothic",sans-serif`;
-          while(bigFs>10&&ctx.measureText(checkTarget).width>bbW-pad*2){bigFs-=2;ctx.font=`bold ${bigFs}px "Hiragino Sans","MS Gothic",sans-serif`;}
+        const minBbH=Math.round(u*0.30),maxBbH=Math.round(chh*0.5);
+        const fitLayout=(mk)=>{let k=1,L=mk(k);for(let it=0;it<6&&L.h>maxBbH;it++){k*=Math.max(0.6,(maxBbH/L.h)*0.98);L=mk(k);}return L;};
+        // 表組み（蔵衛門型）: 工事件名/分類/工種/場所 ＋ 中央の大きい文字
+        const tableLayout=(k,rowsDef,center)=>{
+          const rowH=Math.round(u*0.039*k),labelW=Math.round(bbW*0.24);
+          const fsL=Math.round(u*0.0165*k),fsV=Math.round(u*0.018*k);
+          const valX=bbX+3+labelW+Math.round(pad*0.6);const maxW=bbX+bbW-3-Math.round(pad*0.6)-valX;
+          ctx.font=`bold ${fsV}px ${FF}`;
+          const rows=rowsDef.map(([lab,v])=>{const vl=breakLines(ctx,v,maxW,2);return{lab,vl,h:vl.length>1?Math.round(rowH*1.65):rowH};});
+          const rowsH=rows.reduce((acc,r)=>acc+r.h,0);
+          const c=center(k);
+          return{h:3+rowsH+c.h,draw:(top,H)=>{
+            ctx.strokeStyle="#f5f5dc";ctx.lineWidth=Math.max(1.5,bbW*0.004);
+            let ry=top+3;
+            rows.forEach(r=>{
+              ctx.strokeRect(bbX+3,ry,labelW,r.h);ctx.strokeRect(bbX+3+labelW,ry,bbW-6-labelW,r.h);
+              ctx.font=`bold ${fsL}px ${FF}`;ctx.fillText(r.lab,bbX+3+Math.round(labelW*0.08),ry+r.h/2+fsL*0.36);
+              if(r.vl.length>1){const f2=Math.round(fsV*0.92);ctx.font=`bold ${f2}px ${FF}`;const gap=f2*1.15;const y0=ry+r.h/2-gap/2+f2*0.36;r.vl.forEach((ln,i)=>ctx.fillText(ln,valX,y0+gap*i));}
+              else{ctx.font=`bold ${fsV}px ${FF}`;ctx.fillText(r.vl[0]||"",valX,ry+r.h/2+fsV*0.36);}
+              ry+=r.h;
+            });
+            c.draw(ry,top+H);
+          }};
+        };
+        const checkCenter=(k)=>{
+          let bigFs=Math.round(u*0.039*k);
+          ctx.font=`bold ${bigFs}px ${FF}`;
+          while(bigFs>10&&ctx.measureText(checkTarget).width>bbW-pad*2){bigFs-=2;ctx.font=`bold ${bigFs}px ${FF}`;}
           const note=composeNote(checkTarget);
-          if(note){
-            const nameY=centerY-bigFs*0.55;
-            ctx.fillText(checkTarget,bbX+bbW/2,nameY);
-            let nfs=Math.round(bbH*0.085);
-            ctx.font=`bold ${nfs}px "Hiragino Sans","MS Gothic",sans-serif`;
-            const maxW=bbW-pad*2;
-            const noteLines=[];let buf="";
-            for(const ch of note){
-              if(ctx.measureText(buf+ch).width>maxW){noteLines.push(buf);buf=ch;if(noteLines.length>=2)break;}
-              else buf+=ch;
-            }
-            if(buf&&noteLines.length<2)noteLines.push(buf);
-            noteLines.forEach((ln,i)=>ctx.fillText(ln,bbX+bbW/2,nameY+bigFs*0.75+nfs*1.25*(i+1)-nfs*0.25));
-            ctx.font=`bold ${Math.round(bbH*0.065)}px "Hiragino Sans","MS Gothic",sans-serif`;
-            ctx.fillText(today(),bbX+bbW/2,Math.min(bbY+bbH-pad,nameY+bigFs*0.75+nfs*1.25*noteLines.length+bbH*0.09));
-          }else{
-            ctx.fillText(checkTarget,bbX+bbW/2,centerY);
-            ctx.font=`bold ${Math.round(bbH*0.07)}px "Hiragino Sans","MS Gothic",sans-serif`;
-            ctx.fillText(today(),bbX+bbW/2,centerY+bigFs*1.1);
-          }
-          ctx.textAlign="left";
+          const nfs=Math.round(u*0.0255*k),dfs=Math.round(u*0.0195*k);
+          ctx.font=`bold ${nfs}px ${FF}`;
+          const noteLines=note?wrapCanvas(ctx,note,bbW-pad*2,2):[];
+          const contentH=bigFs*1.25+noteLines.length*nfs*1.3+dfs*1.6;
+          return{h:pad*2+contentH,draw:(y0,y1)=>{
+            let y=y0+Math.max(pad,((y1-y0)-contentH)/2);
+            ctx.textAlign="center";
+            ctx.font=`bold ${bigFs}px ${FF}`;y+=bigFs;ctx.fillText(checkTarget,bbX+bbW/2,y);y+=bigFs*0.25;
+            ctx.font=`bold ${nfs}px ${FF}`;noteLines.forEach(ln=>{y+=nfs*1.3;ctx.fillText(ln,bbX+bbW/2,y-nfs*0.3);});
+            ctx.font=`bold ${dfs}px ${FF}`;y+=dfs*1.4;ctx.fillText(today(),bbX+bbW/2,y);
+            ctx.textAlign="left";
+          }};
+        };
+        const albumCenter=(k)=>{
+          const bigFs=Math.round(u*0.0405*k);const contentH=bigFs*2.5;
+          return{h:pad*2+contentH,draw:(y0,y1)=>{
+            const phaseLabel=albumTarget.phase==="pre"?"着手前":"完成";
+            const y=y0+Math.max(pad,((y1-y0)-contentH)/2);
+            ctx.textAlign="center";ctx.font=`bold ${bigFs}px ${FF}`;
+            ctx.fillText(phaseLabel,bbX+bbW/2,y+bigFs);
+            ctx.fillText(String(albumTarget.position||""),bbX+bbW/2,y+bigFs*2.25);
+            ctx.textAlign="left";
+          }};
+        };
+        // 工程用（項目: 値）
+        const kvLayout=(k,lines)=>{
+          const labelFs=Math.round(u*0.0195*k),valueFs=Math.round(u*0.0235*k),lineH=Math.round(u*0.03*k);
+          const labelW=Math.round(bbW*0.22);
+          const valX=bbX+pad+labelW;const maxW=bbX+bbW-pad-valX;
+          ctx.font=`bold ${valueFs}px ${FF}`;
+          const rows=lines.map(([kk,v])=>({k:kk,vl:breakLines(ctx,String(v),maxW,(kk==="工事名"||kk==="工程"||kk==="管種")?2:1)}));
+          const n=rows.reduce((acc,r)=>acc+r.vl.length,0);
+          return{h:pad*2+n*lineH,draw:(top)=>{
+            let ty=top+pad+Math.round(lineH*0.78);
+            rows.forEach(r=>{
+              ctx.font=`bold ${labelFs}px ${FF}`;ctx.fillText(r.k,bbX+pad,ty);
+              ctx.font=`bold ${valueFs}px ${FF}`;
+              r.vl.forEach((ln,i)=>{ctx.fillText(ln,valX,ty);ty+=(i<r.vl.length-1)?Math.round(lineH*0.88):lineH;});
+            });
+          }};
+        };
+        let L;
+        if(checkTarget){
+          const rowsDef=[["工事件名",header.projectName||""],["分　類","工事写真"],["工　種",`${header.workKind||""}${header.diameter?` φ${header.diameter}`:""}`.trim()],["場　所",header.location||""]];
+          L=fitLayout(k=>tableLayout(k,rowsDef,checkCenter));
         }else if(albumTarget){
-          // ── 蔵衛門スタイル表組み黒板 ──
-          const lw=Math.max(1.5,bbW*0.004);
-          ctx.strokeStyle="#f5f5dc";ctx.lineWidth=lw;
-          const rowH=Math.round(bbH*0.13);
-          const labelW=Math.round(bbW*0.24);
-          const rows=[["工事件名",header.projectName||""],["分　類","着手前及び完成"],["工　種",""],["場　所",header.location||""]];
-          let ry=bbY+3;
-          const fsL=Math.round(rowH*0.42);const fsV=Math.round(rowH*0.46);
-          rows.forEach(([k,v])=>{
-            ctx.strokeRect(bbX+3,ry,labelW,rowH);
-            ctx.strokeRect(bbX+3+labelW,ry,bbW-6-labelW,rowH);
-            ctx.font=`bold ${fsL}px "Hiragino Sans","MS Gothic",sans-serif`;
-            ctx.fillText(k,bbX+3+Math.round(labelW*0.08),ry+rowH*0.66);
-            ctx.font=`bold ${fsV}px "Hiragino Sans","MS Gothic",sans-serif`;
-            let vv=String(v);
-            const maxW=bbW-6-labelW-pad;
-            while(vv&&ctx.measureText(vv).width>maxW)vv=vv.slice(0,-1);
-            ctx.fillText(vv,bbX+3+labelW+Math.round(pad*0.6),ry+rowH*0.66);
-            ry+=rowH;
-          });
-          // 中央に大きく「着手前/完成 + 位置」
-          const phaseLabel=albumTarget.phase==="pre"?"着手前":"完成";
-          const centerY=ry+(bbY+bbH-ry)/2;
-          const bigFs=Math.round(bbH*0.135);
-          ctx.font=`bold ${bigFs}px "Hiragino Sans","MS Gothic",sans-serif`;
-          ctx.textAlign="center";
-          ctx.fillText(phaseLabel,bbX+bbW/2,centerY-bigFs*0.2);
-          ctx.fillText(albumTarget.position,bbX+bbW/2,centerY+bigFs*1.0);
-          ctx.textAlign="left";
+          const rowsDef=[["工事件名",header.projectName||""],["分　類","着手前及び完成"],["工　種",""],["場　所",header.location||""]];
+          L=fitLayout(k=>tableLayout(k,rowsDef,albumCenter));
         }else{
-          // ── 工程用 key-value黒板 ──
           const step=mergedSteps.find(s=>s.id===photoStep)||steps.find(s=>s.id===photoStep);
-          const baseFs=Math.round(bbH*0.095);
-          const lineH=Math.round(bbH*0.1);
-          let ty=bbY+pad+baseFs;
           const lines=[];
-          if(header.projectName)lines.push(["工事名",header.projectName.length>12?header.projectName.slice(0,12)+"…":header.projectName]);
+          if(header.projectName)lines.push(["工事名",header.projectName]);
+          lines.push(["分類",step.photoOnly?"施工状況":"出来形管理"]);
           lines.push(["測点",cur.name||""]);
           lines.push(["工程",step.photoOnly?step.name:`${step.id}.${step.name}`]);
           if(step.photoOnly){const spec=photoSpec(step.name);if(spec)fieldPairs(spec,(k)=>cur.measured[`${step.id}_f_${k}`],autoFieldVal).forEach(([k,v])=>lines.push([k,v]));}
-          lines.push(["管種",pipe2?`${PL[pipeType]}φ${dia}+${PL[pipe2.pipeType||pipeType]}φ${pipe2.diameter}`:`${PL[pipeType]} φ${dia}`]);
+          lines.push(["管種",pipeText(pipeType,dia,pipe2)]);
           if(!step.photoOnly){
             const hVal=(()=>{if(step.id===1)return H0;const bs=steps.find(s=>s.tKey==="t0");if(bs&&step.id===bs.id)return H0-(Number(design.t0)||0);const dmB=measuredD(steps,cur.measured);let h=dmB!==null?dmB:D;let a=false;for(const x of steps){if(x.inputs.includes("D")){a=true;continue;}if(!a)continue;if(x.id>step.id)break;if(x.tKey&&x.tKey!=="t0"&&design[x.tKey])h-=Number(design[x.tKey]);}return h;})();
             const mvB=(f)=>{const v=cur.measured[`${step.id}_${f}`];return(v===undefined||v==="")?null:Number(v);};
@@ -1111,33 +1223,19 @@ export default function App(){
           }
           lines.push(["日付",((cur.dates||{})[step.id])||today()]);
           lines.push(["会社","(有)信濃住宅設備"]);
-          lines.forEach(([k,v])=>{
-            if(ty>bbY+bbH-pad)return;
-            ctx.font=`bold ${Math.round(baseFs*0.7)}px "Hiragino Sans","MS Gothic",sans-serif`;
-            ctx.fillText(k,bbX+pad,ty);
-            ctx.font=`bold ${Math.round(baseFs*0.85)}px "Hiragino Sans","MS Gothic",sans-serif`;
-            ctx.fillText(String(v),bbX+pad+Math.round(bbW*0.22),ty);
-            ty+=lineH;
-          });
+          L=fitLayout(k=>kvLayout(k,lines));
         }
-        canvas.toBlob(async(blob)=>{
-          let src=null;
-          try{
-            const tag=checkTarget?"check":albumTarget?`album_${albumTarget.phase}`:`${safeKey(cur.name||"pt")}_${safeKey(String(photoStep))}`;
-            const path=`${currentProjId||"misc"}/${tag}_${Date.now()}.jpg`;
-            src=await sbUploadPhoto(path,blob);
-          }catch(e){console.warn("photo upload failed, using base64",e);}
-          if(!src)src=canvas.toDataURL("image/jpeg",0.8);
-          if(checkTarget){
-            const it=checkTarget;const nt=composeNote(it);
-            setCheckPhotos(p=>({...p,[it]:[...(p[it]||[]),{id:genUUID(),data:src,time:nowTime(),note:nt}]}));
-          }else if(albumTarget){
-            const at=albumTarget;
-            setAlbumPhotos(p=>[...p,{id:genUUID(),phase:at.phase,position:at.position,data:src,time:nowTime()}]);
-          }else{
-            setCur(p=>{const ph={...p.photos};const a=ph[photoStep]||[];ph[photoStep]=[...a,{id:genUUID(),data:src,time:nowTime()}];const ds={...(p.dates||{})};if(!ds[photoStep])ds[photoStep]=today();return{...p,photos:ph,dates:ds,date:p.date||today()};});
-          }
-        },"image/jpeg",0.85);
+        const bbH=Math.max(minBbH,Math.min(maxBbH,Math.round(L.h)));
+        const bbY=chh-bbH-Math.round(chh*0.02);
+        ctx.fillStyle="#0a4d2e";ctx.fillRect(bbX,bbY,bbW,bbH);
+        ctx.strokeStyle="#f5f5dc";ctx.lineWidth=Math.max(2,bbW*0.006);
+        ctx.strokeRect(bbX+3,bbY+3,bbW-6,bbH-6);
+        ctx.fillStyle="#f5f5dc";
+        L.draw(bbY,bbH);
+        // 保存はまだしない → 確認画面（黒板入りの写真）を出す
+        const stepObj=(!checkTarget&&!albumTarget)?(mergedSteps.find(x=>x.id===photoStep)||steps.find(x=>x.id===photoStep)):null;
+        const label=checkTarget?checkTarget:albumTarget?`${albumTarget.phase==="pre"?"着手前":"完成"}・${albumTarget.position}`:`${cur.name||""}・${stepObj?(stepObj.photoOnly?stepObj.name:`${stepObj.id}.${stepObj.name}`):""}`;
+        setPendingShot({data:canvas.toDataURL("image/jpeg",0.85),label,tgt:{kind:checkTarget?"check":albumTarget?"album":"step",checkTarget,album:albumTarget?{...albumTarget}:null,photoStep,note:checkTarget?composeNote(checkTarget):""}});
       };
       img.src=ev.target.result;
     };
@@ -1158,7 +1256,7 @@ export default function App(){
   const crit=(f,m)=>{const meta=m||FM[f];if(!meta)return"";let p=[];if(meta.minus!==null)p.push(`-${meta.minus}`);if(meta.plus!==null)p.push(`+${meta.plus}`);return p.join("/");};
 
   // ═══ LOCK ═══
-  if(locked){const tryUnlock=()=>{if(keyword.toLowerCase()==="shinano"||keyword==="信濃"){setLocked(false);}else{setKwError(true);setKeyword("");}};
+  if(locked){const tryUnlock=()=>{if(kwOk(keyword)){try{localStorage.setItem("dekigata_unlocked","1");}catch(e){}setLocked(false);}else{setKwError(true);setKeyword("");}};
     return(<div style={{...S.w,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"80vh"}}>
       <div style={{fontSize:40,marginBottom:16}}>🔒</div><h1 style={{fontSize:20,fontWeight:700,marginBottom:4}}>出来形かんたん</h1>
       <div style={{fontSize:12,color:"#888",marginBottom:24}}>関係者専用</div>
@@ -1185,7 +1283,7 @@ export default function App(){
         {!tplLoaded&&<div style={{fontSize:12,color:"#888",textAlign:"center",padding:"6px 0"}}>工種テンプレ読込中…</div>}
         <button onClick={selPublic} style={{...S.sel,textAlign:"left",padding:"10px 14px",borderWidth:2,...(workMode==="public"?S.selOn:{})}}>
           <div style={{fontSize:14,fontWeight:700}}>公共工事・配水管布設（出来形管理）</div>
-          <div style={{fontSize:12,opacity:.6}}>{seqTpls[0]?`工程テンプレ「${seqTpls[0].name}」で状況写真と出来形を一本の流れに展開`:"測点・検測・検査記録表・写真台帳フル装備"}</div></button>
+          <div style={{fontSize:12,opacity:.6}}>{seqTpls[0]?`工程テンプレ「${seqTpls[0].name}」で施工状況と出来形管理を一本の流れに展開`:"測点・検測・検査記録表・写真台帳フル装備"}</div></button>
       </div></div>
     {workMode==="simple"&&<>
       <div style={S.c}><div style={S.ch}>口径（任意）</div>
@@ -1197,7 +1295,7 @@ export default function App(){
     </>}
     {workMode==="public"&&<>
     <div style={S.c}><div style={S.ch}>管種</div><div style={{display:"flex",gap:6}}>
-      {["DCIP","HPPE"].map(k=>(<button key={k} onClick={()=>selPipe(k)} style={{...S.sel,flex:1,...(pipeType===k?S.selOn:{})}}><div style={{fontSize:14,fontWeight:700}}>{k}</div><div style={{fontSize:12,opacity:.6}}>{k==="DCIP"?"ダクタイル鋳鉄管":"ポリエチレン管"}</div></button>))}
+      {["DCIP","HPPE"].map(k=>(<button key={k} onClick={()=>selPipe(k)} style={{...S.sel,flex:1,...(pipeType===k?S.selOn:{})}}><div style={{fontSize:14,fontWeight:700}}>{PL[k]}</div><div style={{fontSize:12,opacity:.6}}>{k==="DCIP"?"ダクタイル鋳鉄管":"ポリエチレン管"}</div></button>))}
       <button onClick={()=>selPipe("SHIKIRI")} style={{...S.sel,flex:.7,...(pipeType==="SHIKIRI"?S.selOn:{})}}><div style={{fontSize:12,fontWeight:700}}>仕切弁筐</div></button></div></div>
     {pipeType!=="SHIKIRI"&&<>
       <div style={S.c}><div style={S.ch}>道路種別</div><div style={{display:"flex",gap:8}}>
@@ -1213,7 +1311,7 @@ export default function App(){
         {header.pipe2&&(<>
           <div style={{fontSize:12,color:"#888",margin:"8px 0 4px"}}>2条目の管種・口径（1条目は口径の大きい方＝主管にしてください）</div>
           <div style={{display:"flex",gap:6,marginBottom:6}}>
-            {["DCIP","HPPE"].map(k=>(<button key={k} onClick={()=>setHeader(h=>{const ds=getDias(k);const cd=Number(h.pipe2?.diameter);return{...h,pipe2:{pipeType:k,diameter:ds.includes(cd)?cd:ds[0]}};})} style={{...S.sel,flex:1,...((header.pipe2.pipeType||pipeType)===k?S.selOn:{})}}><div style={{fontSize:13,fontWeight:700}}>{k}</div></button>))}
+            {["DCIP","HPPE"].map(k=>(<button key={k} onClick={()=>setHeader(h=>{const ds=getDias(k);const cd=Number(h.pipe2?.diameter);return{...h,pipe2:{pipeType:k,diameter:ds.includes(cd)?cd:ds[0]}};})} style={{...S.sel,flex:1,...((header.pipe2.pipeType||pipeType)===k?S.selOn:{})}}><div style={{fontSize:13,fontWeight:700}}>{PL[k]}</div></button>))}
             <button onClick={()=>setHeader(h=>({...h,pipe2:{pipeType:pipeType,diameter:dia}}))} style={{...S.sel,flex:1}}><div style={{fontSize:12,fontWeight:700}}>1条目と同じ</div></button></div>
           <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
             {getDias(header.pipe2.pipeType||pipeType).map(d=>(<button key={d} onClick={()=>setHeader(h=>({...h,pipe2:{...h.pipe2,diameter:d}}))} style={{...S.db,...(Number(header.pipe2.diameter)===d?S.dbOn:{})}}><div style={{fontSize:14,fontWeight:700}}>φ{d}</div><div style={{fontSize:12,opacity:.6}}>OD {getOD(header.pipe2.pipeType||pipeType,d)}</div></button>))}</div>
@@ -1235,9 +1333,14 @@ export default function App(){
           {[["標準",1.0],["大",1.15],["特大",1.3]].map(([l,z])=>(<button key={l} onClick={()=>setZoom(z)} style={{padding:"6px 12px",borderRadius:14,border:`1.5px solid ${fontScale===z?"#1565C0":"#ccc"}`,background:fontScale===z?"#1565C0":"#fff",color:fontScale===z?"#fff":"#555",fontSize:13,fontWeight:700,cursor:"pointer"}}>{l}</button>))}
         </div>
         <button style={{...S.exp,marginBottom:10,background:"#f5f5f5",color:"#555",border:"1px solid #ddd"}} onClick={()=>{window.location.reload();}}>🔄 最新版に更新（v{APP_VERSION}）</button>
-        <button style={{...S.pri,marginBottom:16}} onClick={newProject}>+ 新規プロジェクト</button>
+        <button style={{...S.pri,marginBottom:12}} onClick={newProject}>+ 新規プロジェクト</button>
+        <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
+          <button onClick={()=>{setDelMode(m=>!m);setDelSel([]);}} style={{padding:"7px 12px",borderRadius:8,border:"1px solid #ddd",background:delMode?"#FFEBEE":"#fff",color:delMode?"#C62828":"#555",fontSize:13,fontWeight:700,cursor:"pointer"}}>{delMode?"✕ まとめて削除をやめる":"🗑 まとめて削除"}</button>
+          {delMode&&<button onClick={()=>setDelSel(projects.filter(p=>!(p.header&&String(p.header.projectName||"").trim())).map(p=>p.id))} style={{padding:"7px 12px",borderRadius:8,border:"1px solid #ddd",background:"#fff",color:"#555",fontSize:13,fontWeight:700,cursor:"pointer"}}>名称なしを全選択</button>}
+        </div>
+        {delMode&&<button disabled={delSel.length===0} onClick={bulkDelete} style={{...S.pri,marginBottom:12,background:delSel.length?"#C62828":"#ccc"}}>チェックした {delSel.length} 件を削除</button>}
         {projects.length===0?(<div style={{textAlign:"center",padding:"20px 0",color:"#888",fontSize:13}}>プロジェクトなし</div>):(
-          projects.sort((a,b)=>(b.updatedAt||"").localeCompare(a.updatedAt||"")).map(pj=>{
+          [...projects].sort((a,b)=>(b.updatedAt||"").localeCompare(a.updatedAt||"")).map(pj=>{
             const isCurrent=pj.id===currentProjId;
             const pipeLabel=pj.header?.workKind||PL[pj.pipeType||"DCIP"];
             const nameShow=pj.header?.projectName||"(名称未設定)";
@@ -1246,12 +1349,13 @@ export default function App(){
             return(<div key={pj.id} style={{border:isCurrent?"2px solid #1565C0":"1px solid #ddd",borderRadius:10,padding:"10px 12px",marginBottom:8,background:isCurrent?"#E3F2FD":"#fff"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:15,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nameShow}{isCurrent&&<span style={{fontSize:12,color:"#1565C0",marginLeft:6}}>（現在）</span>}</div>
+                  <div style={{fontSize:15,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nameShow}{isCurrent&&<span style={{fontSize:12,color:"#1565C0",marginLeft:6}}>（現在）</span>}{pj.localDirty&&<span style={{fontSize:11,color:"#E65100",marginLeft:6}}>📱未同期</span>}</div>
                   <div style={{fontSize:12,color:"#888",marginTop:2}}>{pipeLabel} φ{pj.header?.diameter||"—"} / {ptsN}測点 / {dt}</div>
                 </div>
-                <div style={{display:"flex",gap:4,flexShrink:0}}>
+                <div style={{display:"flex",gap:4,flexShrink:0,alignItems:"center"}}>
+                  {delMode?(<input type="checkbox" checked={delSel.includes(pj.id)} onChange={e=>{const on=e.target.checked;setDelSel(p=>on?[...p,pj.id]:p.filter(x=>x!==pj.id));}} style={{width:24,height:24,cursor:"pointer"}}/>):(<>
                   {!isCurrent&&<button style={{...S.sm,fontSize:13,background:"#E3F2FD",padding:"6px 10px",borderRadius:6}} onClick={()=>switchProject(pj.id)}>開く</button>}
-                  <button style={{...S.sm,fontSize:13,color:"#C62828",padding:"6px 10px"}} onClick={()=>deleteProject(pj.id)}>削除</button>
+                  <button style={{...S.sm,fontSize:13,color:"#C62828",padding:"6px 10px"}} onClick={()=>deleteProject(pj.id)}>削除</button></>)}
                 </div>
               </div>
             </div>);
@@ -1291,7 +1395,7 @@ export default function App(){
       <button style={S.cb} onClick={()=>setBulkCount(c=>Math.max(1,c-1))}>−</button>
       <div style={{fontSize:36,fontWeight:700,width:60,textAlign:"center"}}>{bulkCount}</div>
       <button style={S.cb} onClick={()=>setBulkCount(c=>Math.min(20,c+1))}>+</button></div></div>
-    <button style={S.pri} onClick={()=>{bulkCreate();setScreen("list");}}>No.1〜No.{bulkCount} を作成</button></div>);}
+    <button style={S.pri} onClick={()=>{bulkCreate();setScreen("list");}}>{bulkCount>1?`No.0〜No.${bulkCount-1}`:"No.0"} を作成（{bulkCount}測点・起点No.0）</button></div>);}
 
   // ═══ ENTRY ═══
   if(screen==="entry"){
@@ -1334,7 +1438,7 @@ export default function App(){
         return(<div key={step.id} id={`stepcard-${stepIdx}`} style={{...S.c,padding:"12px 14px",background:done?"#F1F8E9":isNext?"#F5F9FF":"#FAFAF5",borderLeft:`5px solid ${done?"#2E7D32":isNext?"#1565C0":"#FFB74D"}`,scrollMarginTop:90,...cardFrame}}>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
             {seqBadge}
-            <span style={{fontSize:15,fontWeight:700,flex:1,color:done?"#2E7D32":"#222"}}>{step.name}<span style={{fontSize:12,color:"#999",marginLeft:6,fontWeight:500}}>状況写真</span></span>
+            <span style={{fontSize:15,fontWeight:700,flex:1,color:done?"#2E7D32":"#222"}}>{step.name}<span style={{fontSize:12,color:"#999",marginLeft:6,fontWeight:500}}>施工状況</span></span>
             {statusTag}
             {(()=>{const sd=(cur.dates||{})[step.id]||"";return(<label style={{display:"flex",alignItems:"center",gap:2,fontSize:12,color:sd?"#1565C0":"#999",flexShrink:0}}>📅<input type="date" value={sd||cur.date||""} onChange={e=>setCur(p=>({...p,dates:{...(p.dates||{}),[step.id]:e.target.value}}))} style={{border:"none",background:"transparent",fontSize:12,color:"inherit",padding:0,width:112}}/></label>);})()}
             </div>
@@ -1374,7 +1478,7 @@ export default function App(){
       return(<div key={step.id} id={`stepcard-${stepIdx}`} style={{...S.c,borderLeft:`5px solid ${isNext?"#1565C0":stCol(dState)}`,background:dState==="done"?"#F1F8E9":isNext?"#F5F9FF":S.c.background,scrollMarginTop:90,...cardFrame}}>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
           {seqBadge}
-          <span style={S.sn}>{step.id}</span><span style={{fontSize:15,fontWeight:700,flex:1}}>{step.name}<span style={{fontSize:12,color:"#999",marginLeft:6,fontWeight:500}}>出来形</span>{dState==="partial"&&<span style={{fontSize:12,color:"#E65100",marginLeft:6}}>{photos.length>0?"（数値未入力）":"（写真未撮影）"}</span>}</span>
+          <span style={S.sn}>{step.id}</span><span style={{fontSize:15,fontWeight:700,flex:1}}>{step.name}<span style={{fontSize:12,color:"#999",marginLeft:6,fontWeight:500}}>出来形管理</span>{dState==="partial"&&<span style={{fontSize:12,color:"#E65100",marginLeft:6}}>{photos.length>0?"（数値未入力）":"（写真未撮影）"}</span>}</span>
           {statusTag}
           {(()=>{const sd=(cur.dates||{})[step.id]||"";return(<label style={{display:"flex",alignItems:"center",gap:2,fontSize:12,color:sd?"#1565C0":"#999",flexShrink:0}}>📅<input type="date" value={sd||cur.date||""} onChange={e=>setCur(p=>({...p,dates:{...(p.dates||{}),[step.id]:e.target.value}}))} style={{border:"none",background:"transparent",fontSize:12,color:"inherit",padding:0,width:112}}/></label>);})()}
           </div>
@@ -1422,6 +1526,7 @@ export default function App(){
             <button onClick={()=>delPhoto(step.id,pi)} style={{position:"absolute",top:-6,right:-6,width:20,height:20,borderRadius:10,background:"#C62828",color:"#fff",border:"none",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>×</button></div>))}</div>)}
       </div>);})}
     <button style={S.pri} onClick={savePoint}>✓ 一覧に戻る（入力・写真は自動保存済み）</button>
+    {shotPreview}
     {viewPhoto&&(<div onClick={()=>setViewPhoto(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
       <img src={viewPhoto} style={{maxWidth:"100%",maxHeight:"90vh",borderRadius:12}}/></div>)}
   </div>);}
@@ -1465,7 +1570,7 @@ export default function App(){
       </>):(<>
         {hasAnchors?(<div style={{...S.c,background:"#E3F2FD",border:"1px solid #90CAF9"}}>
           <div style={{fontSize:13,fontWeight:700,color:"#1565C0",marginBottom:4}}>この順序で各測点の入力画面に展開されます</div>
-          <div style={{fontSize:12,color:"#555"}}>📐＝出来形工程（@で位置指定）／📷＝状況写真。撮影は各測点の画面で行います。項目の追加・削除で順序を調整できます。</div>
+          <div style={{fontSize:12,color:"#555"}}>📐＝出来形管理（@で位置指定）／📷＝施工状況。撮影は各測点の画面で行います。項目の追加・削除で順序を調整できます。</div>
           <button onClick={resetTpl} style={{...S.sm,fontSize:12,color:"#C62828",marginTop:6}}>リセット（テンプレ選び直し）</button></div>
         ):(<div style={{...S.c,display:"flex",alignItems:"center",gap:10,background:remainN>0?"#FFF3E0":"#E8F5E9",border:`1px solid ${remainN>0?"#FFCC80":"#A5D6A7"}`}}>
           <span style={{fontSize:22}}>{remainN>0?"📷":"✅"}</span>
@@ -1480,7 +1585,7 @@ export default function App(){
             const isA=String(item).trim().startsWith("@");
             return(<div key={item} style={{...S.c,borderLeft:`4px solid ${isA?"#1565C0":"#FFB74D"}`,padding:"8px 14px",display:"flex",alignItems:"center",gap:8}}>
               <span style={{fontSize:16,width:24,textAlign:"center"}}>{isA?"📐":"📷"}</span>
-              <span style={{fontSize:13,fontWeight:600,flex:1,color:isA?"#1565C0":"#333"}}>{isA?String(item).trim().slice(1)+"（出来形）":item}</span>
+              <span style={{fontSize:13,fontWeight:600,flex:1,color:isA?"#1565C0":"#333"}}>{isA?String(item).trim().slice(1)+"（出来形管理）":item}</span>
               <button onClick={()=>delItem(item)} style={{...S.sm,fontSize:12,color:"#C62828",padding:"4px 6px"}}>×</button></div>);
           }
           return(<div key={item} style={{...S.c,borderLeft:`4px solid ${done?"#2E7D32":"#FFB74D"}`,padding:"10px 14px"}}>
@@ -1522,7 +1627,8 @@ export default function App(){
             <button style={{...S.camBtn,flexShrink:0}} onClick={addItem}>+ 追加</button></div></div>
         <button style={{...S.exp,background:"#E3F2FD",color:"#1565C0",border:"1px solid #90CAF9"}} onClick={saveTpl}>このリストをテンプレとして保存（全工事で使い回し）</button>
       </>)}
-      {viewPhoto&&(<div onClick={()=>setViewPhoto(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      {shotPreview}
+    {viewPhoto&&(<div onClick={()=>setViewPhoto(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
         <img src={viewPhoto} style={{maxWidth:"100%",maxHeight:"90vh",borderRadius:12}}/></div>)}
       {toast&&<div style={S.to}>{toast}</div>}
     </div>);}
@@ -1564,7 +1670,8 @@ export default function App(){
           <input style={{...S.inp,flex:1}} value={newPosName} onChange={e=>setNewPosName(e.target.value)} placeholder="例: 中間点②"/>
           <button style={{...S.camBtn,flexShrink:0}} onClick={addPos}>+ 追加</button></div></div>
       <button style={S.exp} onClick={handleAlbumPDF}>写真台帳PDF出力（表紙+台帳）</button>
-      {viewPhoto&&(<div onClick={()=>setViewPhoto(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      {shotPreview}
+    {viewPhoto&&(<div onClick={()=>setViewPhoto(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
         <img src={viewPhoto} style={{maxWidth:"100%",maxHeight:"90vh",borderRadius:12}}/></div>)}
       {toast&&<div style={S.to}>{toast}</div>}
     </div>);}
@@ -1595,19 +1702,19 @@ export default function App(){
             {pc>0&&<span style={{fontSize:12,color:"#1565C0"}}>📷{pc}</span>}</div>
           <button style={{...S.sm,fontSize:14,fontWeight:700}} onClick={()=>editPoint(idx)}>入力→</button></div></div>);})}
     <div style={{display:"flex",flexDirection:"column",gap:8,marginTop:12}}>
-      <button style={{...S.pri,background:"#fff",color:"#1565C0",border:"2px solid #1565C0"}} onClick={()=>setPoints(p=>[...p,{name:`No.${p.length+1}`,date:"",measured:{},photos:{},dates:{}}])}>+ 測点追加</button>
+      <button style={{...S.pri,background:"#fff",color:"#1565C0",border:"2px solid #1565C0"}} onClick={()=>setPoints(p=>[...p,{name:nextPointName(p),date:"",measured:{},photos:{},dates:{}}])}>+ 測点追加</button>
       {(()=>{
         if(hasAnchors||header.projectType==="simple")return null;
         const seq=(templates||[]).filter(t=>(Array.isArray(t.items)?t.items:[]).some(i=>String(i).trim().startsWith("@")));
         if(seq.length===0)return null;
         const hasPhotos=Object.values(checkPhotos||{}).some(a=>Array.isArray(a)&&a.length>0);
         return(<div style={{...S.c,background:"#FFF8E1",border:"2px solid #FFB300"}}>
-          <div style={{fontSize:14,fontWeight:700,color:"#E65100",marginBottom:4}}>⚠ 状況写真と出来形が別画面になっています</div>
-          <div style={{fontSize:12,color:"#555",marginBottom:8}}>工程テンプレを適用すると、各測点の画面で「状況写真📷 → 出来形📐」が{(seq[0].items||[]).length}項目の一本流れになります。{hasPhotos?"（今のチェックリストの写真は残ります）":""}</div>
+          <div style={{fontSize:14,fontWeight:700,color:"#E65100",marginBottom:4}}>⚠ 施工状況と出来形管理が別画面になっています</div>
+          <div style={{fontSize:12,color:"#555",marginBottom:8}}>工程テンプレを適用すると、各測点の画面で「施工状況📷 → 出来形管理📐」が{(seq[0].items||[]).length}項目の一本流れになります。{hasPhotos?"（今のチェックリストの写真は残ります）":""}</div>
           <button style={S.pri} onClick={()=>{setCheckItems(seq[0].items);setToast(`「${seq[0].name}」を適用 → 測点を開いてください`);setTimeout(()=>setToast(""),3000);}}>一本流れにする（{seq[0].name}）</button>
         </div>);})()}
       <button style={{...S.exp,background:"#FFF3E0",color:"#E65100",border:"1px solid #FFCC80"}} onClick={()=>setScreen("album")}>📷 着手前及び完成（写真台帳）</button>
-      <button style={{...S.exp,background:!hasAnchors&&checkItems.length>0&&checkItems.filter(it=>!((checkPhotos[it]||[]).length>0)).length>0?"#FFEBEE":"#F5F5F5",color:!hasAnchors&&checkItems.length>0&&checkItems.filter(it=>!((checkPhotos[it]||[]).length>0)).length>0?"#C62828":"#555",border:"1px solid #ddd"}} onClick={()=>setScreen("check")}>{hasAnchors?"🗂 工程リスト（状況写真の順序を編集）":`✓ 撮影チェックリスト${checkItems.length>0?(()=>{const r=checkItems.filter(it=>!((checkPhotos[it]||[]).length>0)).length;return r>0?`（未撮影 ${r}件）`:"（完了✅）";})():""}`}</button>
+      <button style={{...S.exp,background:!hasAnchors&&checkItems.length>0&&checkItems.filter(it=>!((checkPhotos[it]||[]).length>0)).length>0?"#FFEBEE":"#F5F5F5",color:!hasAnchors&&checkItems.length>0&&checkItems.filter(it=>!((checkPhotos[it]||[]).length>0)).length>0?"#C62828":"#555",border:"1px solid #ddd"}} onClick={()=>setScreen("check")}>{hasAnchors?"🗂 工程リスト（撮影順を編集）":`✓ 撮影チェックリスト${checkItems.length>0?(()=>{const r=checkItems.filter(it=>!((checkPhotos[it]||[]).length>0)).length;return r>0?`（未撮影 ${r}件）`:"（完了✅）";})():""}`}</button>
       <button style={S.exp} onClick={handlePDF}>出来形PDF（検査記録表＋各測点{steps.length}枚・豆図付き）</button>
       <button style={{...S.exp,background:"#E3F2FD",color:"#1565C0",border:"1px solid #90CAF9"}} onClick={handleStatusPDF}>施工状況写真PDF（各測点{mergedSteps.length}枚・黒板欄付き）</button>
       <button style={{...S.exp,background:"#E3F2FD",color:"#1565C0",border:"1px solid #90CAF9"}} onClick={()=>{
@@ -1630,9 +1737,14 @@ export default function App(){
           {[["標準",1.0],["大",1.15],["特大",1.3]].map(([l,z])=>(<button key={l} onClick={()=>setZoom(z)} style={{padding:"6px 12px",borderRadius:14,border:`1.5px solid ${fontScale===z?"#1565C0":"#ccc"}`,background:fontScale===z?"#1565C0":"#fff",color:fontScale===z?"#fff":"#555",fontSize:13,fontWeight:700,cursor:"pointer"}}>{l}</button>))}
         </div>
         <button style={{...S.exp,marginBottom:10,background:"#f5f5f5",color:"#555",border:"1px solid #ddd"}} onClick={()=>{window.location.reload();}}>🔄 最新版に更新（v{APP_VERSION}）</button>
-        <button style={{...S.pri,marginBottom:16}} onClick={newProject}>+ 新規プロジェクト</button>
+        <button style={{...S.pri,marginBottom:12}} onClick={newProject}>+ 新規プロジェクト</button>
+        <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
+          <button onClick={()=>{setDelMode(m=>!m);setDelSel([]);}} style={{padding:"7px 12px",borderRadius:8,border:"1px solid #ddd",background:delMode?"#FFEBEE":"#fff",color:delMode?"#C62828":"#555",fontSize:13,fontWeight:700,cursor:"pointer"}}>{delMode?"✕ まとめて削除をやめる":"🗑 まとめて削除"}</button>
+          {delMode&&<button onClick={()=>setDelSel(projects.filter(p=>!(p.header&&String(p.header.projectName||"").trim())).map(p=>p.id))} style={{padding:"7px 12px",borderRadius:8,border:"1px solid #ddd",background:"#fff",color:"#555",fontSize:13,fontWeight:700,cursor:"pointer"}}>名称なしを全選択</button>}
+        </div>
+        {delMode&&<button disabled={delSel.length===0} onClick={bulkDelete} style={{...S.pri,marginBottom:12,background:delSel.length?"#C62828":"#ccc"}}>チェックした {delSel.length} 件を削除</button>}
         {projects.length===0?(<div style={{textAlign:"center",padding:"20px 0",color:"#888",fontSize:13}}>プロジェクトなし</div>):(
-          projects.sort((a,b)=>(b.updatedAt||"").localeCompare(a.updatedAt||"")).map(pj=>{
+          [...projects].sort((a,b)=>(b.updatedAt||"").localeCompare(a.updatedAt||"")).map(pj=>{
             const isCurrent=pj.id===currentProjId;
             const pipeLabel=pj.header?.workKind||PL[pj.pipeType||"DCIP"];
             const nameShow=pj.header?.projectName||"(名称未設定)";
@@ -1641,12 +1753,13 @@ export default function App(){
             return(<div key={pj.id} style={{border:isCurrent?"2px solid #1565C0":"1px solid #ddd",borderRadius:10,padding:"10px 12px",marginBottom:8,background:isCurrent?"#E3F2FD":"#fff"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:15,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nameShow}{isCurrent&&<span style={{fontSize:12,color:"#1565C0",marginLeft:6}}>（現在）</span>}</div>
+                  <div style={{fontSize:15,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nameShow}{isCurrent&&<span style={{fontSize:12,color:"#1565C0",marginLeft:6}}>（現在）</span>}{pj.localDirty&&<span style={{fontSize:11,color:"#E65100",marginLeft:6}}>📱未同期</span>}</div>
                   <div style={{fontSize:12,color:"#888",marginTop:2}}>{pipeLabel} φ{pj.header?.diameter||"—"} / {ptsN}測点 / {dt}</div>
                 </div>
-                <div style={{display:"flex",gap:4,flexShrink:0}}>
+                <div style={{display:"flex",gap:4,flexShrink:0,alignItems:"center"}}>
+                  {delMode?(<input type="checkbox" checked={delSel.includes(pj.id)} onChange={e=>{const on=e.target.checked;setDelSel(p=>on?[...p,pj.id]:p.filter(x=>x!==pj.id));}} style={{width:24,height:24,cursor:"pointer"}}/>):(<>
                   {!isCurrent&&<button style={{...S.sm,fontSize:13,background:"#E3F2FD",padding:"6px 10px",borderRadius:6}} onClick={()=>switchProject(pj.id)}>開く</button>}
-                  <button style={{...S.sm,fontSize:13,color:"#C62828",padding:"6px 10px"}} onClick={()=>deleteProject(pj.id)}>削除</button>
+                  <button style={{...S.sm,fontSize:13,color:"#C62828",padding:"6px 10px"}} onClick={()=>deleteProject(pj.id)}>削除</button></>)}
                 </div>
               </div>
             </div>);
