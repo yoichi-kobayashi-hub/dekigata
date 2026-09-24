@@ -80,7 +80,7 @@ function getOD(p,d){return(p==="DCIP"?OD_DCIP:p==="HPPE"?OD_HPPE:{})[d]||0;}
 function getDias(p){return p==="DCIP"?DIAS_DCIP:p==="HPPE"?DIAS_HPPE:[];}
 function calcH0(p,D,d){const od=getOD(p,d);return p==="HPPE"?D+od+100:D+od;}
 const FM={H:{label:"深さ",minus:30,plus:30},B:{label:"幅",minus:50,plus:null},Ba:{label:"舗装幅",minus:25,plus:null},D:{label:"埋設深",minus:30,plus:30},D2:{label:"埋設深②",minus:30,plus:30},ta:{label:"舗装厚",minus:7,plus:null},t0:{label:"基礎砂",minus:30,plus:30},t1:{label:"保護砂",minus:30,plus:30},t2:{label:"発生土",minus:30,plus:30},t3:{label:"発生土",minus:30,plus:30},t4:{label:"発生土",minus:30,plus:30},t5:{label:"路盤",minus:30,plus:30},t6:{label:"路盤",minus:30,plus:30},t7:{label:"路盤",minus:30,plus:30},A:{label:"弁芯距離",minus:null,plus:25},Hs:{label:"シート",minus:30,plus:30},Dm:{label:"マーカー",minus:30,plus:30}};
-const APP_VERSION="2.0.9";
+const APP_VERSION="2.1.0";
 const PL={DCIP:"DCIP(GX)",HPPE:"HPPE",SHIKIRI:"仕切弁筐"};
 // キーワード判定（URLの ?ky=shinano でも解除。一度解除した端末は記憶）
 function kwOk(v){const t=String(v||"").trim();return t.toLowerCase()==="shinano"||t==="信濃";}
@@ -709,6 +709,7 @@ export default function App(){
   const fileRef=useRef(null);
   const[photoStep,setPhotoStep]=useState(null);
   const[pendingShot,setPendingShot]=useState(null);
+  const[previewZoom,setPreviewZoom]=useState(false);
   const[albumTarget,setAlbumTarget]=useState(null);
   const[albumPhotos,setAlbumPhotos]=useState([]);
   const[albumPositions,setAlbumPositions]=useState(["始点","中間点","終点"]);
@@ -1085,19 +1086,29 @@ export default function App(){
   const saveShot=()=>{const ps=pendingShot;if(!ps||!ps.data)return;applyShot(ps.tgt,ps.data);setPendingShot(null);setToast("保存しました");setTimeout(()=>setToast(""),1800);};
   const retakeShot=()=>{setPendingShot(null);if(fileRef.current){fileRef.current.value="";fileRef.current.click();}};
   const cancelShot=()=>{setPendingShot(null);};
-  const shotPreview=pendingShot?(<div style={{position:"fixed",inset:0,background:"#111",zIndex:10000,display:"flex",flexDirection:"column",padding:"12px 12px calc(12px + env(safe-area-inset-bottom,0px))"}}>
-    <div style={{color:"#fff",fontSize:15,fontWeight:700,textAlign:"center",padding:"6px 0 10px"}}>{pendingShot.loading?"黒板を合成中…":`確認：${pendingShot.label||""}`}</div>
-    <div style={{flex:1,minHeight:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
-      {pendingShot.loading?(<div style={{color:"#aaa",fontSize:14}}>少々お待ちください</div>):(<img src={pendingShot.data} style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain",borderRadius:8}}/>)}
+  const shotPreview=pendingShot?(<div style={{position:"fixed",inset:0,background:"#111",zIndex:10000,display:"flex",flexDirection:"column"}}>
+    <div style={{color:"#fff",fontSize:15,fontWeight:700,textAlign:"center",padding:"10px 8px 6px",flexShrink:0}}>{pendingShot.loading?"黒板を合成中…":`確認：${pendingShot.label||""}`}</div>
+    <div style={{flex:1,minHeight:0,overflow:"auto",WebkitOverflowScrolling:"touch",padding:"0 6px"}}>
+      {pendingShot.loading?(<div style={{color:"#aaa",fontSize:14,textAlign:"center",paddingTop:"30vh"}}>少々お待ちください</div>):(<>
+        <div onClick={()=>setPreviewZoom(z=>!z)} style={{overflow:"auto",WebkitOverflowScrolling:"touch",borderRadius:6}}>
+          <img src={pendingShot.data} style={{width:previewZoom?"260%":"100%",maxWidth:"none",display:"block"}}/>
+        </div>
+        <div style={{color:"#9e9e9e",fontSize:11,textAlign:"right",padding:"3px 2px 8px"}}>{previewZoom?"タップで元に戻す":"写真をタップで拡大"}</div>
+        {pendingShot.boardData&&(<>
+          <div style={{color:"#f5f5dc",fontSize:13,fontWeight:700,padding:"2px 2px 6px"}}>▼ 黒板（拡大）</div>
+          <img src={pendingShot.boardData} style={{width:"100%",display:"block",borderRadius:6,border:"2px solid #f5f5dc"}}/>
+        </>)}
+        <div style={{height:8}}/>
+      </>)}
     </div>
-    {!pendingShot.loading&&(<>
-      <div style={{color:"#ccc",fontSize:12,textAlign:"center",padding:"8px 0"}}>黒板の工程・数値・日付を確認して保存</div>
+    {!pendingShot.loading&&(<div style={{flexShrink:0,padding:"8px 10px calc(10px + env(safe-area-inset-bottom,0px))",background:"#111",borderTop:"1px solid #333"}}>
+      <div style={{color:"#ccc",fontSize:12,textAlign:"center",paddingBottom:8}}>黒板の工程・数値・日付を確認して保存</div>
       <div style={{display:"flex",gap:10}}>
-        <button onClick={retakeShot} style={{flex:1,padding:"16px",fontSize:17,fontWeight:700,borderRadius:12,border:"2px solid #fff",background:"transparent",color:"#fff",cursor:"pointer"}}>↺ 撮り直す</button>
-        <button onClick={saveShot} style={{flex:1.4,padding:"16px",fontSize:18,fontWeight:800,borderRadius:12,border:"none",background:"#2E7D32",color:"#fff",cursor:"pointer"}}>✓ 保存する</button>
+        <button onClick={retakeShot} style={{flex:1,padding:"15px",fontSize:17,fontWeight:700,borderRadius:12,border:"2px solid #fff",background:"transparent",color:"#fff",cursor:"pointer"}}>↺ 撮り直す</button>
+        <button onClick={saveShot} style={{flex:1.4,padding:"15px",fontSize:18,fontWeight:800,borderRadius:12,border:"none",background:"#2E7D32",color:"#fff",cursor:"pointer"}}>✓ 保存する</button>
       </div>
-      <button onClick={cancelShot} style={{marginTop:10,padding:"10px",fontSize:14,borderRadius:10,border:"none",background:"transparent",color:"#aaa",cursor:"pointer"}}>やめる（保存しない）</button>
-    </>)}
+      <button onClick={cancelShot} style={{width:"100%",marginTop:6,padding:"8px",fontSize:14,borderRadius:10,border:"none",background:"transparent",color:"#aaa",cursor:"pointer"}}>やめる（保存しない）</button>
+    </div>)}
   </div>):null;
   const takePhoto=(stepId)=>{setAlbumTarget(null);setCheckTarget(null);setPhotoStep(stepId);if(fileRef.current){fileRef.current.value="";fileRef.current.click();}};
   const takeAlbumPhoto=(phase,position)=>{setPhotoStep(null);setCheckTarget(null);setAlbumTarget({phase,position});if(fileRef.current){fileRef.current.value="";fileRef.current.click();}};
@@ -1235,7 +1246,11 @@ export default function App(){
         // 保存はまだしない → 確認画面（黒板入りの写真）を出す
         const stepObj=(!checkTarget&&!albumTarget)?(mergedSteps.find(x=>x.id===photoStep)||steps.find(x=>x.id===photoStep)):null;
         const label=checkTarget?checkTarget:albumTarget?`${albumTarget.phase==="pre"?"着手前":"完成"}・${albumTarget.position}`:`${cur.name||""}・${stepObj?(stepObj.photoOnly?stepObj.name:`${stepObj.id}.${stepObj.name}`):""}`;
-        setPendingShot({data:canvas.toDataURL("image/jpeg",0.85),label,tgt:{kind:checkTarget?"check":albumTarget?"album":"step",checkTarget,album:albumTarget?{...albumTarget}:null,photoStep,note:checkTarget?composeNote(checkTarget):""}});
+        let boardData=null;
+        try{const m=Math.round(bbW*0.03);const x0=Math.max(0,bbX-m),y0=Math.max(0,bbY-m);const w=Math.min(cw-x0,bbW+m*2),h=Math.min(chh-y0,bbH+m*2);
+          const c2=document.createElement("canvas");c2.width=w;c2.height=h;c2.getContext("2d").drawImage(canvas,x0,y0,w,h,0,0,w,h);boardData=c2.toDataURL("image/jpeg",0.92);}catch(e){}
+        setPreviewZoom(false);
+        setPendingShot({data:canvas.toDataURL("image/jpeg",0.85),boardData,label,tgt:{kind:checkTarget?"check":albumTarget?"album":"step",checkTarget,album:albumTarget?{...albumTarget}:null,photoStep,note:checkTarget?composeNote(checkTarget):""}});
       };
       img.src=ev.target.result;
     };
