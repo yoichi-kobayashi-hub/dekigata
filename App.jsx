@@ -81,7 +81,7 @@ function getOD(p,d){return(p==="DCIP"?OD_DCIP:p==="HPPE"?OD_HPPE:{})[d]||0;}
 function getDias(p){return p==="DCIP"?DIAS_DCIP:p==="HPPE"?DIAS_HPPE:[];}
 function calcH0(p,D,d){const od=getOD(p,d);return p==="HPPE"?D+od+100:D+od;}
 const FM={H:{label:"深さ",minus:30,plus:30},B:{label:"幅",minus:50,plus:null},Ba:{label:"舗装幅",minus:25,plus:null},D:{label:"埋設深",minus:30,plus:30},D2:{label:"埋設深②",minus:30,plus:30},ta:{label:"舗装厚",minus:7,plus:null},t0:{label:"基礎砂",minus:30,plus:30},t1:{label:"保護砂",minus:30,plus:30},t2:{label:"発生土",minus:30,plus:30},t3:{label:"発生土",minus:30,plus:30},t4:{label:"発生土",minus:30,plus:30},t5:{label:"路盤",minus:30,plus:30},t6:{label:"路盤",minus:30,plus:30},t7:{label:"路盤",minus:30,plus:30},A:{label:"弁芯距離",minus:null,plus:25},Hs:{label:"シート",minus:30,plus:30},Dm:{label:"マーカー",minus:30,plus:30}};
-const APP_VERSION="2.1.4";
+const APP_VERSION="2.1.5";
 const PL={DCIP:"DCIP(GX)",HPPE:"HPPE",SHIKIRI:"仕切弁筐"};
 // キーワード判定（URLの ?ky=shinano でも解除。一度解除した端末は記憶）
 function kwOk(v){const t=String(v||"").trim();return t.toLowerCase()==="shinano"||t==="信濃";}
@@ -660,14 +660,17 @@ function mergeProjectData(local,cloud,base){
   const same=(a,bb)=>JSON.stringify(a===undefined?null:a)===JSON.stringify(bb===undefined?null:bb);
   const pick=(lv,cv,bv)=>same(lv,bv)?cv:lv;
   const mergeObj=(lo,co,bo)=>{lo=lo||{};co=co||{};bo=bo||{};const out={...co};new Set([...Object.keys(lo),...Object.keys(bo)]).forEach(k=>{if(!same(lo[k],bo[k])){if(lo[k]===undefined)delete out[k];else out[k]=lo[k];}});return out;};
-  const unionPhotos=(la,ca)=>{la=Array.isArray(la)?la:[];ca=Array.isArray(ca)?ca:[];const seen=new Set();const out=[];[...ca,...la].forEach(ph=>{const k=ph&&(ph.id||ph.data);if(!k||seen.has(k))return;seen.add(k);out.push(ph);});return out;};
+  // 同じ写真の判定は id か URL のどちらかが一致すればOK（二重登録しない）
+  const unionPhotos=(la,ca)=>{la=Array.isArray(la)?la:[];ca=Array.isArray(ca)?ca:[];const seenId=new Set(),seenUrl=new Set();const out=[];[...ca,...la].forEach(ph=>{if(!ph)return;const id=ph.id||null;const url=(typeof ph.data==="string"&&!ph.data.startsWith("data:"))?ph.data:null;if(!id&&!ph.data)return;if((id&&seenId.has(id))||(url&&seenUrl.has(url)))return;if(!id&&!url&&out.some(x=>x&&x.data===ph.data))return;if(id)seenId.add(id);if(url)seenUrl.add(url);out.push(ph);});return out;};
   const mergePhotoMap=(lm,cm)=>{lm=lm||{};cm=cm||{};const out={...cm};Object.keys(lm).forEach(k=>{out[k]=unionPhotos(lm[k],cm[k]);});return out;};
   const mergePoint=(lp,cp,bp)=>{if(!cp)return lp;if(!lp)return cp;const bb=bp||{};return{...cp,name:pick(lp.name,cp.name,bb.name),date:pick(lp.date,cp.date,bb.date),measured:mergeObj(lp.measured,cp.measured,bb.measured),dates:mergeObj(lp.dates,cp.dates,bb.dates),photos:mergePhotoMap(lp.photos,cp.photos)};};
   const lps=l.points||[],cps=c.points||[],bps=b.points||[];
   const byName=(arr)=>{const m={};arr.forEach(pt=>{if(pt&&pt.name)m[pt.name]=pt;});return m;};
   const cm=byName(cps),bm=byName(bps),lm=byName(lps);
   const outPoints=lps.map(lp=>mergePoint(lp,cm[lp.name],bm[lp.name]));
-  cps.forEach(cp=>{if(!lm[cp.name]&&!bm[cp.name])outPoints.push(cp);});
+  // 測点を消すボタンは無い → この端末で測点数が減っていたら事故。クラウド側の測点は消さずに残す
+  const lostLocally=lps.length<bps.length;
+  cps.forEach(cp=>{if(!lm[cp.name]&&(!bm[cp.name]||lostLocally))outPoints.push(cp);});
   return{
     pipeType:pick(l.pipeType,c.pipeType,b.pipeType),roadType:pick(l.roadType,c.roadType,b.roadType),surfaceType:pick(l.surfaceType,c.surfaceType,b.surfaceType),
     header:mergeObj(l.header,c.header,b.header),design:mergeObj(l.design,c.design,b.design),points:outPoints,
@@ -675,6 +678,44 @@ function mergeProjectData(local,cloud,base){
     checkItems:pick(l.checkItems,c.checkItems,b.checkItems),checkPhotos:mergePhotoMap(l.checkPhotos,c.checkPhotos),
     checkNotes:mergeObj(l.checkNotes,c.checkNotes,b.checkNotes),checkDims:mergeObj(l.checkDims,c.checkDims,b.checkDims),
   };
+}
+// 起動時・工事切替時の最初の画面: 設定済みなら入力画面（公共=現場入力、簡易=撮影チェックリスト）、未設定なら工事情報
+function landingFor(n){const h=(n&&n.header)||{};if(!String(h.projectName||"").trim())return"setup";if(h.projectType==="simple")return((n.checkItems||[]).length?"check":"setup");return((n.points||[]).length?"list":"setup");}
+// 測点にデータ（写真・実測値）があるか
+function hasPtData(pt){if(!pt)return false;if(Object.values(pt.photos||{}).some(a=>Array.isArray(a)&&a.length>0))return true;return Object.values(pt.measured||{}).some(v=>v!==undefined&&v!==null&&String(v).trim()!=="");}
+// 保存ガード: 最後に同期した版より測点が減っていたら、消えた測点を戻してから保存（測点を消すボタンは無い＝減るのは事故）
+function guardLostPoints(local,base){
+  const lps=(local&&local.points)||[];const bps=(base&&base.points)||[];
+  if(!bps.length||lps.length>=bps.length)return null;
+  const names=new Set(lps.map(p=>p&&p.name));
+  const add=bps.filter(bp=>bp&&bp.name&&!names.has(bp.name));
+  if(!add.length)return null;
+  return{data:{...local,points:[...lps,...add]},restored:add.length};
+}
+// 救出: この端末に残っている測点が、クラウドから消えていたら戻す（2026/9/25 20:59 の件）
+//  ・クラウドに無い測点（写真・実測あり／または測点数そのものが減っている）→ 戻す
+//  ・クラウドの同名測点が空っぽで、この端末にはデータあり → この端末の方で置き換え
+//  ・他の端末で名前を変えただけの測点（写真が全部クラウド側にある）は戻さない
+//  ・測点以外（工事情報・設計値など）はクラウド（新しい方）のまま
+function rescueMerge(local,cloud){
+  const L=local||{},C=cloud||{};
+  const lps=(L.points||[]).filter(p=>p&&p.name),cps=(C.points||[]).filter(Boolean);
+  if(!lps.length)return null;
+  const cBy=new Map();cps.forEach(p=>{if(p.name&&!cBy.has(p.name))cBy.set(p.name,p);});
+  const keys=new Set();cps.forEach(p=>Object.values(p.photos||{}).forEach(a=>(Array.isArray(a)?a:[]).forEach(ph=>{if(!ph)return;if(ph.id)keys.add("i:"+ph.id);if(typeof ph.data==="string"&&!ph.data.startsWith("data:"))keys.add("d:"+ph.data);})));
+  const photosOf=(p)=>{const r=[];Object.values(p.photos||{}).forEach(a=>(Array.isArray(a)?a:[]).forEach(ph=>{if(ph)r.push(ph);}));return r;};
+  const movedAway=(p)=>{const ph=photosOf(p);return ph.length>0&&ph.every(x=>(x.id&&keys.has("i:"+x.id))||(typeof x.data==="string"&&keys.has("d:"+x.data)));};
+  const drop=cps.length<lps.length;
+  let restored=0;const out=[];const placed=new Set();
+  lps.forEach(lp=>{
+    const cp=cBy.get(lp.name);
+    if(cp&&!placed.has(cp)){placed.add(cp);if(!hasPtData(cp)&&hasPtData(lp)){out.push({...cp,...lp,name:cp.name});restored++;}else out.push(cp);return;}
+    if(movedAway(lp))return;
+    if(hasPtData(lp)||drop){out.push(lp);restored++;}
+  });
+  cps.forEach(cp=>{if(!placed.has(cp))out.push(cp);});
+  if(!restored)return null;
+  return{data:{...C,points:out},restored};
 }
 async function sbFetchDeleted(){const res=await fetch(`${SB_URL}/rest/v1/dekigata_deleted?select=id`,{headers:sbHeaders});if(!res.ok)throw new Error("deleted fetch failed");const rows=await res.json();return new Set(rows.map(r=>r.id));}
 function getPendingDel(){try{return JSON.parse(localStorage.getItem("dekigata_pending_del")||"[]");}catch(e){return[];}}
@@ -746,6 +787,7 @@ export default function App(){
   const[newItemName,setNewItemName]=useState("");
   const[checkNotes,setCheckNotes]=useState({});
   const[unsynced,setUnsynced]=useState(0);
+  const[rescueInfo,setRescueInfo]=useState("");
   const[fontScale,setFontScale]=useState(()=>{try{const v=localStorage.getItem("dekigata_zoom");return v?Number(v):1.15;}catch(e){return 1.15;}});
   const setZoom=(z)=>{setFontScale(z);try{localStorage.setItem("dekigata_zoom",String(z));}catch(e){}};
   const[checkDims,setCheckDims]=useState({});
@@ -789,12 +831,15 @@ export default function App(){
       let local=[];
       try{const raw=localStorage.getItem("dekigata_projects");if(raw)local=JSON.parse(raw);}catch(e){}
       local=(local||[]).filter(lp=>lp&&!deleted.has(lp.id));
+      let rescuedN=0;
       if(cloudOk){
         cloudProjects=cloudProjects.filter(c=>!deleted.has(c.id));
         for(const lp of local){
           const ci=cloudProjects.findIndex(c=>c.id===lp.id);
           // 圏外で編集済み(localDirty)はローカル版を優先（開いた時にクラウドとマージ保存される）
-          if(ci>=0){if(lp.localDirty)cloudProjects[ci]={...lp};continue;}
+          if(ci>=0&&lp.localDirty){cloudProjects[ci]={...lp};continue;}
+          // 同期済みの端末でも、クラウドから消えた測点がこの端末に残っていれば救出（上書きで消さない）
+          if(ci>=0){const rs=rescueMerge(lp,cloudProjects[ci]);if(rs){cloudProjects[ci]={...rs.data,id:lp.id,updatedAt:cloudProjects[ci].updatedAt,localDirty:true};rescuedN+=rs.restored;}continue;}
           // クラウドに無い工事：未送信（圏外で作成・編集）だけ送る。
           // 送信済みなのにクラウドに無い＝他の端末で削除された → 復活させない（2026/9/23 22:53 の件）
           const legacy=String(lp.id).startsWith("p_");
@@ -808,6 +853,7 @@ export default function App(){
         setProjects(cloudProjects);
         setSyncStatus("synced");
         try{localStorage.setItem("dekigata_projects",JSON.stringify(cloudProjects));}catch(e){}
+        if(rescuedN>0)setRescueInfo(`この端末に残っていたデータから ${rescuedN}測点 を戻しました（自動でクラウドに保存します）`);
       }else{
         setProjects(local);
         setSyncStatus("offline");
@@ -830,6 +876,8 @@ export default function App(){
       const nb=countBase64(n);setUnsynced(nb);
       if(nb>0){dirtyRef.current=true;setTimeout(()=>{if(syncSaveRef.current)syncSaveRef.current();},1500);}
       setInited(true);
+      // 設定済みの工事は、いきなり入力画面から（工事情報→設計値を毎回通らない）
+      setScreen(landingFor(n));
     }
   // eslint-disable-next-line
   },[currentProjId,loaded]);
@@ -863,6 +911,9 @@ export default function App(){
       if(fl.changed){applyData(work);}
       if(JSON.stringify(work).length>2500000){setSyncStatus("offline");setToast(`写真${fl.remain}枚が未送信（電波を確認）`);setTimeout(()=>setToast(""),3000);return;}
       let local=fl.changed?work:stateRef.current;let snap=snapRef.current;
+      // 保存ガード: 測点が減った状態は絶対にクラウドへ送らない（消えた測点を戻してから送る）
+      const g=guardLostPoints(local,snap.data);
+      if(g){local=g.data;applyData(local);stateRef.current=local;setRescueInfo(`消えかけた ${g.restored}測点 を元に戻しました`);}
       if(!snap.updatedAt&&isEmptyProject(local)){setSyncStatus("synced");return;}
       for(let attempt=0;attempt<3;attempt++){
         const name=(local.header&&local.header.projectName)||"";
@@ -916,6 +967,16 @@ export default function App(){
         snapRef.current={updatedAt:row.updated_at,data:row.data||{}};
         if(syncSaveRef.current)syncSaveRef.current();
       }else{
+        // 他の端末の版で測点が消えていたら、取り込まずにこの端末のデータで戻す
+        const rs=rescueMerge(stateRef.current,row.data||{});
+        if(rs){
+          applyData(rs.data);
+          snapRef.current={updatedAt:row.updated_at,data:row.data||{}};
+          dirtyRef.current=true;mirrorLocal(currentProjId,rs.data,row.updated_at,true);
+          setRescueInfo(`他の端末で消えた ${rs.restored}測点 を、この端末のデータから戻しました`);
+          if(syncSaveRef.current)syncSaveRef.current();
+          return;
+        }
         applyData(row.data||{});
         snapRef.current={updatedAt:row.updated_at,data:row.data||{}};
         mirrorLocal(currentProjId,row.data||{},row.updated_at,false);
@@ -937,7 +998,7 @@ export default function App(){
       const cloudIds=new Set(cloud.map(c=>c.id));
       setProjects(prev=>{
         const prevMap=new Map(prev.map(p=>[p.id,p]));
-        const out=cloud.map(c=>{const lp=prevMap.get(c.id);return(lp&&(lp.localDirty||lp.id===currentProjId))?lp:c;});
+        const out=cloud.map(c=>{const lp=prevMap.get(c.id);if(lp&&(lp.localDirty||lp.id===currentProjId))return lp;if(lp){const rs=rescueMerge(lp,c);if(rs)return{...rs.data,id:c.id,updatedAt:c.updatedAt,localDirty:true};}return c;});
         prev.forEach(lp=>{if(cloudIds.has(lp.id)||deleted.has(lp.id))return;if(lp.localDirty||lp.id===currentProjId)out.push(lp);});
         try{localStorage.setItem("dekigata_projects",JSON.stringify(out));}catch(e){}
         return out;
@@ -1049,18 +1110,22 @@ export default function App(){
   const mergedSteps=hasAnchors?mergeSteps(steps,checkItems):steps;
   const tSum=steps.reduce((s,st)=>s+(st.tKey&&design[st.tKey]?Number(design[st.tKey]):0),0)+(design.ta?Number(design.ta):0);
 
-  const rebuild=(p,r,sf)=>{const st=getSteps(p,r,sf,ROADS.find(x=>x.key===r).D);setDesign(d=>({...getDefaults(st),B:d.B||"",Ba:d.Ba||""}));setPoints([]);};
-  if(!inited&&loaded&&currentProjId&&!projects.find(p=>p.id===currentProjId)){rebuild("DCIP","shidou","asphalt");setInited(true);}
+  // 種別を変えた時は設計厚を初期値に（B・Baは残す）。測点・写真には一切さわらない（9/25 の事故の原因だった）
+  const applyTypeDefaults=(p,r,sf)=>{const st=getSteps(p,r,sf,ROADS.find(x=>x.key===r).D);setDesign(d=>({...getDefaults(st),B:d.B||"",Ba:d.Ba||""}));};
+  if(!inited&&loaded&&currentProjId&&!projects.find(p=>p.id===currentProjId)){applyTypeDefaults("DCIP","shidou","asphalt");setInited(true);}
+  const typeChangeOk=()=>{if(!(points||[]).some(hasPtData))return true;return window.confirm("この工事には入力済みの測点があります。\n\n変更しても測点・写真は消えません。\n各層の設計厚は新しい種別の初期値になります。\n\n変更しますか？");};
 
   const calcDesignH=(sid,measured)=>designHFor(steps.find(s=>s.id===sid),steps,design,H0,D,measured||cur.measured,surfaceType);
   const dv=(f,sid)=>{if(f==="H")return calcDesignH(sid);if(f==="B")return design.B?Number(design.B):null;if(f==="Ba")return design.Ba?Number(design.Ba):null;if(f==="D")return D;if(f==="D2")return D2;if(f==="ta")return Number(design.ta)||40;return design[f]?Number(design[f]):null;};
   const calcT=(step,meas)=>calcTm(step,steps,meas);
   const prevLbl=(step)=>{if(!step.prevRef)return"";if(step.prevRef==="D"){const ds=steps.find(s=>s.inputs.includes("D"));return`D(${ds?.id})−H(${step.id})`;}return`H(${step.prevRef})−H(${step.id})`;};
 
-  const selPipe=(k)=>{setPipeType(k);const ds=getDias(k);if(ds.length&&!ds.includes(header.diameter))setHeader(h=>({...h,diameter:ds[0]}));rebuild(k,roadType,surfaceType);};
-  const selRoad=(k)=>{setRoadType(k);rebuild(pipeType,k,surfaceType);};
-  const selSurface=(k)=>{setSurfaceType(k);rebuild(pipeType,roadType,k);};
-  const bulkCreate=()=>{const pts=[];for(let i=0;i<bulkCount;i++)pts.push({name:`No.${i}`,date:"",measured:{},photos:{},dates:{}});setPoints(pts);};
+  // 同じボタンをもう一度押しても何も起きない。入力済みの測点がある時は確認してから
+  const selPipe=(k)=>{if(k===pipeType)return;if(!typeChangeOk())return;setPipeType(k);const ds=getDias(k);if(ds.length&&!ds.includes(header.diameter))setHeader(h=>({...h,diameter:ds[0]}));applyTypeDefaults(k,roadType,surfaceType);};
+  const selRoad=(k)=>{if(k===roadType)return;if(!typeChangeOk())return;setRoadType(k);applyTypeDefaults(pipeType,k,surfaceType);};
+  const selSurface=(k)=>{if(k===surfaceType)return;if(!typeChangeOk())return;setSurfaceType(k);applyTypeDefaults(pipeType,roadType,k);};
+  const bulkCreate=()=>{const pts=[];for(let i=0;i<bulkCount;i++)pts.push({name:`No.${i}`,date:"",measured:{},photos:{},dates:{}});setPoints(p=>(p&&p.length)?p:pts);};
+  const rescueBanner=rescueInfo?(<div onClick={()=>setRescueInfo("")} style={{background:"#E8F5E9",border:"2px solid #2E7D32",borderRadius:10,padding:"10px 12px",margin:"0 4px 10px",fontSize:14,fontWeight:700,color:"#1B5E20",cursor:"pointer"}}>✅ {rescueInfo}<div style={{fontSize:11,fontWeight:500,color:"#555",marginTop:2}}>（タップで閉じる）</div></div>):null;
   const editPoint=(i)=>{const p=JSON.parse(JSON.stringify(points[i]));if(!p.photos)p.photos={};setCur(p);setEditIdx(i);setScreen("entry");};
   const savePoint=()=>{if(editIdx!==null)setPoints(p=>{const n=[...p];n[editIdx]={...cur};return n;});setScreen("list");};
   // 測点編集中は cur の変更を即 points に反映（=自動保存→クラウドへ）。保存ボタン待ちで消える事故を構造で防ぐ
@@ -1345,10 +1410,12 @@ export default function App(){
     const workMode=header.projectType===undefined?"public":header.projectType;
     const seqTpls=(templates||[]).filter(t=>(Array.isArray(t.items)?t.items:[]).some(i=>String(i).trim().startsWith("@")));
     const simpleTpls=(templates||[]).filter(t=>!seqTpls.includes(t));
-    const selSimple=(tpl)=>{setHeader(h=>({...h,projectType:"simple",workKind:tpl.name,diameter:""}));setCheckItems(Array.isArray(tpl.items)?tpl.items:[]);};
-    const selPublic=()=>{setHeader(h=>({...h,projectType:"public",workKind:"",diameter:h.diameter&&Number(h.diameter)>0?Number(h.diameter):150}));if((checkItems||[]).length===0&&seqTpls[0])setCheckItems(seqTpls[0].items);};
+    const hasAnyData=(points||[]).some(hasPtData)||Object.values(checkPhotos||{}).some(a=>Array.isArray(a)&&a.length>0);
+    const selSimple=(tpl)=>{if(workMode==="simple"&&header.workKind===tpl.name)return;if(hasAnyData&&!window.confirm(`工種を「${tpl.name}」に切り替えますか？\n（撮影済みの写真・測点は消えません）`))return;setHeader(h=>({...h,projectType:"simple",workKind:tpl.name,diameter:""}));setCheckItems(Array.isArray(tpl.items)?tpl.items:[]);};
+    const selPublic=()=>{if(workMode==="public")return;if(hasAnyData&&!window.confirm("工種を「公共工事・配水管布設」に切り替えますか？\n（撮影済みの写真・測点は消えません）"))return;setHeader(h=>({...h,projectType:"public",workKind:"",diameter:h.diameter&&Number(h.diameter)>0?Number(h.diameter):150}));if(!(checkItems||[]).some(i=>String(i).trim().startsWith("@"))&&seqTpls[0])setCheckItems(seqTpls[0].items);};
     return(<div style={{...S.w,zoom:fontScale}}>
     <div style={S.top}><h1 style={S.logo}>出来形かんたん <span style={{fontSize:10,color:"#bbb",fontWeight:500}}>v{APP_VERSION}</span></h1><div style={{display:"flex",alignItems:"center",gap:6}}><span style={S.bg}>{workMode==="simple"?"簡易":"1/3"}</span><button style={{...S.bk,fontSize:20,padding:"4px 8px"}} onClick={()=>setShowProjList(true)} title="プロジェクト一覧">≡</button></div></div>
+    {rescueBanner}
     <div style={S.c}><div style={S.ch}>工事情報</div>
       {[["projectName","工事名"],["location","工事箇所"]].map(([k,l])=>(<div key={k} style={{marginBottom:8}}><label style={S.lb}>{l}</label><input style={S.inp} value={header[k]||""} onChange={e=>setHeader(h=>({...h,[k]:e.target.value}))} placeholder={l}/></div>))}</div>
     <div style={S.c}><div style={S.ch}>工種を選ぶ</div>
@@ -1759,6 +1826,7 @@ export default function App(){
       <h1 style={{fontSize:16,fontWeight:700,margin:0,flex:1,textAlign:"center",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{header.projectName||"出来形管理"}</h1>
       <span style={{fontSize:12,fontWeight:600,color:syncBadge.c,background:syncBadge.bg,padding:"3px 8px",borderRadius:10,whiteSpace:"nowrap"}}>{syncBadge.t}</span>
       <button style={{...S.bk,fontSize:18,padding:"4px 8px"}} onClick={()=>setShowProjList(true)} title="プロジェクト一覧">≡</button></div>
+    {rescueBanner}
     <div style={{display:"flex",gap:6,fontSize:12,color:"#888",padding:"0 4px",marginBottom:10,flexWrap:"wrap"}}>
       <span>{PL[pipeType]}</span><span>φ{dia}</span><span>{road.label}</span><span>{steps.length}工程</span></div>
     {points.length===0?(<div style={{textAlign:"center",padding:"40px 16px",color:"#888"}}>
