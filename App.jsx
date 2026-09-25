@@ -81,7 +81,7 @@ function getOD(p,d){return(p==="DCIP"?OD_DCIP:p==="HPPE"?OD_HPPE:{})[d]||0;}
 function getDias(p){return p==="DCIP"?DIAS_DCIP:p==="HPPE"?DIAS_HPPE:[];}
 function calcH0(p,D,d){const od=getOD(p,d);return p==="HPPE"?D+od+100:D+od;}
 const FM={H:{label:"深さ",minus:30,plus:30},B:{label:"幅",minus:50,plus:null},Ba:{label:"舗装幅",minus:25,plus:null},D:{label:"埋設深",minus:30,plus:30},D2:{label:"埋設深②",minus:30,plus:30},ta:{label:"舗装厚",minus:7,plus:null},t0:{label:"基礎砂",minus:30,plus:30},t1:{label:"保護砂",minus:30,plus:30},t2:{label:"発生土",minus:30,plus:30},t3:{label:"発生土",minus:30,plus:30},t4:{label:"発生土",minus:30,plus:30},t5:{label:"路盤",minus:30,plus:30},t6:{label:"路盤",minus:30,plus:30},t7:{label:"路盤",minus:30,plus:30},A:{label:"弁芯距離",minus:null,plus:25},Hs:{label:"シート",minus:30,plus:30},Dm:{label:"マーカー",minus:30,plus:30}};
-const APP_VERSION="2.1.5";
+const APP_VERSION="2.1.6";
 const PL={DCIP:"DCIP(GX)",HPPE:"HPPE",SHIKIRI:"仕切弁筐"};
 // キーワード判定（URLの ?ky=shinano でも解除。一度解除した端末は記憶）
 function kwOk(v){const t=String(v||"").trim();return t.toLowerCase()==="shinano"||t==="信濃";}
@@ -641,7 +641,7 @@ async function sbFetchProject(id){
 async function sbConditionalUpdate(id,name,data,baseUpdatedAt){
   const res=await fetch(`${SB_URL}/rest/v1/dekigata_projects?id=eq.${id}&updated_at=eq.${encodeURIComponent(baseUpdatedAt)}&select=id,updated_at`,{
     method:"PATCH",headers:{...sbHeaders,"Prefer":"return=representation"},
-    body:JSON.stringify({name,data,updated_at:new Date().toISOString()})});
+    body:JSON.stringify({name,data:{...data,_meta:deviceMeta()},updated_at:new Date().toISOString()})});
   if(!res.ok)throw new Error("patch failed");
   const rows=await res.json();
   return rows.length>0?{ok:true,row:rows[0]}:{conflict:true};
@@ -649,7 +649,7 @@ async function sbConditionalUpdate(id,name,data,baseUpdatedAt){
 async function sbInsertProject(id,name,data){
   const res=await fetch(`${SB_URL}/rest/v1/dekigata_projects?select=id,updated_at`,{
     method:"POST",headers:{...sbHeaders,"Prefer":"return=representation"},
-    body:JSON.stringify({id,name,data,updated_at:new Date().toISOString()})});
+    body:JSON.stringify({id,name,data:{...data,_meta:deviceMeta()},updated_at:new Date().toISOString()})});
   if(res.status===409)return{conflict:true};
   if(!res.ok)throw new Error("insert failed");
   const rows=await res.json();if(!rows||rows.length===0)return{deleted:true};return{ok:true,row:rows[0]};
@@ -671,13 +671,15 @@ function mergeProjectData(local,cloud,base){
   // 測点を消すボタンは無い → この端末で測点数が減っていたら事故。クラウド側の測点は消さずに残す
   const lostLocally=lps.length<bps.length;
   cps.forEach(cp=>{if(!lm[cp.name]&&(!bm[cp.name]||lostLocally))outPoints.push(cp);});
-  return{
+  return stripTrashed({
     pipeType:pick(l.pipeType,c.pipeType,b.pipeType),roadType:pick(l.roadType,c.roadType,b.roadType),surfaceType:pick(l.surfaceType,c.surfaceType,b.surfaceType),
     header:mergeObj(l.header,c.header,b.header),design:mergeObj(l.design,c.design,b.design),points:outPoints,
     albumPhotos:unionPhotos(l.albumPhotos,c.albumPhotos),albumPositions:pick(l.albumPositions,c.albumPositions,b.albumPositions),
     checkItems:pick(l.checkItems,c.checkItems,b.checkItems),checkPhotos:mergePhotoMap(l.checkPhotos,c.checkPhotos),
     checkNotes:mergeObj(l.checkNotes,c.checkNotes,b.checkNotes),checkDims:mergeObj(l.checkDims,c.checkDims,b.checkDims),
-  };
+    // ゴミ箱は全端末ぶんを合わせる（消した写真はどの端末からも戻ってこない。戻した写真は戻る）
+    photoTrash:unionTrash(l.photoTrash,c.photoTrash),
+  });
 }
 // 起動時・工事切替時の最初の画面: 設定済みなら入力画面（公共=現場入力、簡易=撮影チェックリスト）、未設定なら工事情報
 function landingFor(n){const h=(n&&n.header)||{};if(!String(h.projectName||"").trim())return"setup";if(h.projectType==="simple")return((n.checkItems||[]).length?"check":"setup");return((n.points||[]).length?"list":"setup");}
@@ -717,6 +719,124 @@ function rescueMerge(local,cloud){
   if(!restored)return null;
   return{data:{...C,points:out},restored};
 }
+// ═══════════════════════════════════════
+// 復元の仕組み（v2.1.6）: 端末の控え／写真のゴミ箱／倉庫の写真との照合／クラウドの履歴
+// ═══════════════════════════════════════
+// 写真ファイル名に「どの測点・工程の写真か」を読める形で入れる（倉庫の写真だけからでも組み直せる）
+function b64u(s){try{const b=new TextEncoder().encode(String(s??""));let bin="";b.forEach(x=>{bin+=String.fromCharCode(x);});return btoa(bin).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");}catch(e){return"";}}
+function unb64u(s){try{const t=String(s||"").replace(/-/g,"+").replace(/_/g,"/");const bin=atob(t+(t.length%4?"=".repeat(4-t.length%4):""));const b=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)b[i]=bin.charCodeAt(i);return new TextDecoder().decode(b);}catch(e){return null;}}
+function photoFileName(c){const ts=Date.now(),r=Math.random().toString(36).slice(2,6);
+  if(c.kind==="ck")return`ck.${b64u(c.item)}.${ts}.${r}.jpg`;
+  if(c.kind==="al")return`al.${b64u(c.phase)}.${b64u(c.position)}.${ts}.${r}.jpg`;
+  return`pt.${b64u(c.point)}.${b64u(c.step)}.${ts}.${r}.jpg`;}
+// 倉庫のファイル名 → {kind, point, step, item, phase, position, ts}。新しい名前も昔の名前（ハッシュ入り）も読む
+function parsePhotoName(file,known){
+  const k=known||{};const f=String(file||"");
+  const parts=f.split(".");
+  if(parts.length>=5&&parts[parts.length-1]==="jpg"&&/^\d{13}$/.test(parts[parts.length-3])&&["pt","ck","al"].includes(parts[0])){
+    const ts=Number(parts[parts.length-3]);const mid=parts.slice(1,parts.length-3).map(unb64u);
+    if(mid.some(x=>x===null))return null;
+    if(parts[0]==="pt"&&mid.length===2)return{kind:"pt",point:mid[0],step:mid[1],ts};
+    if(parts[0]==="ck"&&mid.length===1)return{kind:"ck",item:mid[0],ts};
+    if(parts[0]==="al"&&mid.length===2)return{kind:"al",phase:mid[0],position:mid[1],ts};
+    return null;
+  }
+  const m=f.match(/^(.+)_(\d{13})_([0-9a-z]{1,8})\.jpg$/);if(!m)return null;
+  const head=m[1],ts=Number(m[2]);
+  const findKey=(key,cands)=>{for(const c of (cands||[])){if(safeKey(String(c))===key)return String(c);}return null;};
+  if(head.startsWith("check_")){const key=head.slice(6);const item=findKey(key,k.items);return{kind:"ck",item:item||null,rawKey:key,ts};}
+  if(head.startsWith("album_")){const key=head.slice(6);return{kind:"al",phase:key==="pre"||key==="comp"?key:null,position:null,rawKey:key,ts};}
+  const cut=head.lastIndexOf("_");if(cut<=0)return null;
+  const pk=head.slice(0,cut),sk=head.slice(cut+1);
+  const point=findKey(pk,k.points)||((/^[A-Za-z0-9._-]{1,40}$/.test(pk)&&!/^k[0-9a-z]{4,8}$/.test(pk))?pk:null);
+  const step=findKey(sk,k.steps);
+  return{kind:"pt",point,step,rawStep:step?null:sk,ts};
+}
+const isB64=(ph)=>!!ph&&typeof ph.data==="string"&&ph.data.startsWith("data:");
+const photoUrlOf=(ph)=>(ph&&typeof ph.data==="string"&&/^https?:/.test(ph.data))?ph.data:null;
+const samePhoto=(a,b)=>!!a&&!!b&&((a.id&&b.id&&a.id===b.id)||(!!photoUrlOf(a)&&photoUrlOf(a)===photoUrlOf(b)));
+// ゴミ箱（消した写真はここへ。最後の操作が「消した」なら非表示、「戻した」なら表示）
+const trashKeyOf=(t)=>(t&&(t.id||(t.data&&!String(t.data).startsWith("data:")?t.data:null)))||null;
+const trashActive=(t)=>!!t&&(t.deletedAt||"")>(t.restoredAt||"");
+function unionTrash(a,b){const m=new Map();[...(Array.isArray(a)?a:[]),...(Array.isArray(b)?b:[])].forEach(t=>{const k=trashKeyOf(t);if(!k)return;const p=m.get(k);const tv=(x)=>[x.deletedAt||"",x.restoredAt||""].sort().pop();if(!p||tv(t)>tv(p)||(tv(t)===tv(p)&&!isB64(t)&&isB64(p)))m.set(k,t);});return[...m.values()];}
+function trashedKeys(trash){const s=new Set();(Array.isArray(trash)?trash:[]).forEach(t=>{if(!trashActive(t))return;if(t.id)s.add("i:"+t.id);const u=t.data&&!String(t.data).startsWith("data:")?t.data:null;if(u)s.add("d:"+u);});return s;}
+const isTrashed=(ph,tk)=>!!ph&&tk.size>0&&((ph.id&&tk.has("i:"+ph.id))||(photoUrlOf(ph)&&tk.has("d:"+photoUrlOf(ph))));
+// ゴミ箱に入っている写真は、どの端末から来ても表示しない（削除が全端末に伝わる）
+function stripTrashed(d){const tk=trashedKeys(d.photoTrash);if(!tk.size)return d;const keep=(arr)=>(Array.isArray(arr)?arr:[]).filter(ph=>!isTrashed(ph,tk));
+  const points=(d.points||[]).map(pt=>{if(!pt||!pt.photos)return pt;let ch=false;const ph={};Object.keys(pt.photos).forEach(k=>{const a=keep(pt.photos[k]);if(a.length!==(pt.photos[k]||[]).length)ch=true;ph[k]=a;});return ch?{...pt,photos:ph}:pt;});
+  const checkPhotos={};Object.keys(d.checkPhotos||{}).forEach(k=>{checkPhotos[k]=keep(d.checkPhotos[k]);});
+  return{...d,points,checkPhotos,albumPhotos:keep(d.albumPhotos)};}
+// 写真を元の場所（測点・工程／チェック項目／台帳）へ足す。すでにある写真は足さない
+function placePhotos(data,entries){
+  const D=JSON.parse(JSON.stringify(data||{}));D.points=D.points||[];D.checkPhotos=D.checkPhotos||{};D.albumPhotos=D.albumPhotos||[];D.checkItems=D.checkItems||[];D.albumPositions=(D.albumPositions&&D.albumPositions.length)?D.albumPositions:["始点","中間点","終点"];
+  let added=0,newPoints=0;const skipped=[];
+  (entries||[]).forEach(e=>{
+    const ph={id:e.id||hashStr(e.data),data:e.data,time:e.time||"",...(e.note?{note:e.note}:{}),...(e.restored?{restored:e.restored}:{})};
+    if(!ph.data){skipped.push(e);return;}
+    if(e.kind==="ck"){if(!e.item){skipped.push(e);return;}if(!D.checkItems.includes(e.item))D.checkItems.push(e.item);const a=D.checkPhotos[e.item]=D.checkPhotos[e.item]||[];if(a.some(x=>samePhoto(x,ph)))return;a.push(ph);added++;return;}
+    if(e.kind==="al"){const pos=e.position||"位置不明";if(!D.albumPositions.includes(pos))D.albumPositions.push(pos);if(D.albumPhotos.some(x=>samePhoto(x,ph)))return;D.albumPhotos.push({...ph,phase:e.phase||"pre",position:pos});added++;return;}
+    if(!e.point||e.step===null||e.step===undefined||e.step===""){skipped.push(e);return;}
+    let pt=D.points.find(p=>p&&p.name===e.point);
+    if(!pt){pt={name:e.point,date:e.date||"",measured:{},photos:{},dates:{}};D.points.push(pt);newPoints++;}
+    pt.photos=pt.photos||{};pt.dates=pt.dates||{};const sk=String(e.step);
+    const a=pt.photos[sk]=pt.photos[sk]||[];if(a.some(x=>samePhoto(x,ph)))return;a.push(ph);added++;
+    if(e.date&&!pt.dates[sk])pt.dates[sk]=e.date;if(e.date&&!pt.date)pt.date=e.date;
+  });
+  // 新しく作った測点は No.番号順に並べ直す（既存の並びは崩さない）
+  if(newPoints>0){const num=(p)=>{const m=String(p&&p.name||"").match(/^No\.?\s*(\d+)/i);return m?Number(m[1]):Infinity;};const allNum=D.points.every(p=>num(p)!==Infinity);if(allNum)D.points.sort((a,b)=>num(a)-num(b));}
+  return{data:D,added,newPoints,skipped};
+}
+// 過去の版・バックアップから「足りない分だけ」戻す（今の入力は上書きしない）
+function additiveRestore(cur,old){
+  const C=JSON.parse(JSON.stringify(cur||{}));const O=old||{};const tk=trashedKeys(unionTrash(C.photoTrash,O.photoTrash));
+  C.points=C.points||[];C.checkPhotos=C.checkPhotos||{};C.albumPhotos=C.albumPhotos||[];C.checkItems=C.checkItems||[];
+  let addP=0,addPh=0,addV=0;const empty=(v)=>v===undefined||v===null||String(v).trim()==="";
+  const byName=new Map(C.points.filter(p=>p&&p.name).map(p=>[p.name,p]));
+  (O.points||[]).forEach(op=>{if(!op||!op.name)return;let cp=byName.get(op.name);
+    if(!cp){cp={name:op.name,date:op.date||"",measured:{},photos:{},dates:{}};C.points.push(cp);byName.set(op.name,cp);addP++;}
+    cp.photos=cp.photos||{};cp.measured=cp.measured||{};cp.dates=cp.dates||{};
+    Object.entries(op.photos||{}).forEach(([k,arr])=>(Array.isArray(arr)?arr:[]).forEach(ph=>{if(!ph||isB64(ph)||isTrashed(ph,tk))return;const l=cp.photos[k]=cp.photos[k]||[];if(!l.some(x=>samePhoto(x,ph))){l.push(ph);addPh++;}}));
+    Object.entries(op.measured||{}).forEach(([k,v])=>{if(!empty(v)&&empty(cp.measured[k])){cp.measured[k]=v;addV++;}});
+    Object.entries(op.dates||{}).forEach(([k,v])=>{if(v&&!cp.dates[k])cp.dates[k]=v;});
+    if(!cp.date&&op.date)cp.date=op.date;});
+  Object.entries(O.checkPhotos||{}).forEach(([k,arr])=>(Array.isArray(arr)?arr:[]).forEach(ph=>{if(!ph||isB64(ph)||isTrashed(ph,tk))return;const l=C.checkPhotos[k]=C.checkPhotos[k]||[];if(!l.some(x=>samePhoto(x,ph))){l.push(ph);addPh++;if(!C.checkItems.includes(k))C.checkItems.push(k);}}));
+  (O.albumPhotos||[]).forEach(ph=>{if(!ph||isB64(ph)||isTrashed(ph,tk))return;if(!C.albumPhotos.some(x=>samePhoto(x,ph))){C.albumPhotos.push(ph);addPh++;}});
+  ["checkNotes","checkDims"].forEach(f=>{const src=O[f]||{};C[f]=C[f]||{};Object.keys(src).forEach(k=>{if(C[f][k]===undefined){C[f][k]=src[k];addV++;}});});
+  ["header","design"].forEach(f=>{const src=O[f]||{};C[f]=C[f]||{};Object.keys(src).forEach(k=>{if(empty(C[f][k])&&!empty(src[k])){C[f][k]=src[k];addV++;}});});
+  if((!C.checkItems||!C.checkItems.length)&&(O.checkItems||[]).length){C.checkItems=O.checkItems;addV++;}
+  C.photoTrash=unionTrash(C.photoTrash,O.photoTrash);
+  return{data:C,addP,addPh,addV};
+}
+// ── 端末の控え（IndexedDB）: 撮った写真は、クラウドに届いたと確認できるまで端末に別保存 ──
+const JDB="dekigata_journal",JSTORE="shots";let jdbP=null;const journalIds=new Set();
+function jdb(){if(!jdbP){jdbP=new Promise((res,rej)=>{try{if(typeof indexedDB==="undefined")return rej(new Error("no idb"));const r=indexedDB.open(JDB,1);r.onupgradeneeded=()=>{const db=r.result;if(!db.objectStoreNames.contains(JSTORE)){const s=db.createObjectStore(JSTORE,{keyPath:"id"});s.createIndex("projectId","projectId");}};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);}catch(e){rej(e);}}).catch(e=>{jdbP=null;throw e;});}return jdbP;}
+async function jTx(mode,fn){const db=await jdb();return new Promise((res,rej)=>{const tx=db.transaction(JSTORE,mode);const st=tx.objectStore(JSTORE);let out;try{out=fn(st);}catch(e){rej(e);return;}tx.oncomplete=()=>res(out&&out.result!==undefined?out.result:out);tx.onerror=()=>rej(tx.error);tx.onabort=()=>rej(tx.error);});}
+async function jPut(rec){try{await jTx("readwrite",st=>st.put(rec));if(rec&&rec.id)journalIds.add(rec.id);return true;}catch(e){return false;}}
+async function jAll(projectId){try{const r=await jTx("readonly",st=>projectId?st.index("projectId").getAll(projectId):st.getAll());const arr=Array.isArray(r)?r:[];arr.forEach(e=>{if(e&&e.id&&(e.data||e.url))journalIds.add(e.id);});return arr;}catch(e){return[];}}
+async function jPatch(id,patch){try{await jTx("readwrite",st=>{const g=st.get(id);g.onsuccess=()=>{if(g.result)st.put({...g.result,...patch});};return null;});return true;}catch(e){return false;}}
+async function jDel(ids){try{await jTx("readwrite",st=>{(ids||[]).forEach(id=>st.delete(id));return null;});return true;}catch(e){return false;}}
+// ── この端末の名前（履歴に「どの端末が書いたか」を残す） ──
+function deviceId(){try{let v=localStorage.getItem("dekigata_device_id");if(!v){v=genUUID().slice(0,8);localStorage.setItem("dekigata_device_id",v);}return v;}catch(e){return"x";}}
+function uaKind(ua){ua=String(ua||(typeof navigator!=="undefined"?navigator.userAgent:""));if(/iPhone/.test(ua))return"iPhone";if(/iPad/.test(ua)||(/Macintosh/.test(ua)&&typeof navigator!=="undefined"&&navigator.maxTouchPoints>1))return"iPad";if(/Macintosh/.test(ua))return"Mac/iPad";if(/Android/.test(ua))return"Android";if(/Windows/.test(ua))return"PC";return"端末";}
+function deviceLabel(){try{const v=localStorage.getItem("dekigata_device_label");if(v&&v.trim())return v.trim();}catch(e){}return`${uaKind()}-${deviceId().slice(0,4)}`;}
+function deviceMeta(){return{device:deviceLabel(),deviceId:deviceId(),v:APP_VERSION,at:new Date().toISOString()};}
+// ── 端末への保存（容量オーバーでも、写真を控えに逃がして保存を続ける） ──
+let storageWarnSetter=null;let localWriteFull=false;
+function writeLocalProjects(list){
+  try{localStorage.setItem("dekigata_projects",JSON.stringify(list));localWriteFull=false;return true;}catch(e){localWriteFull=true;}
+  try{const slim=(list||[]).map(p=>{const sw=(ph)=>isB64(ph)&&ph.id&&journalIds.has(ph.id)?{...ph,data:"idb:"+ph.id}:ph;return{...p,points:(p.points||[]).map(pt=>pt&&pt.photos?{...pt,photos:Object.fromEntries(Object.entries(pt.photos).map(([k,a])=>[k,(a||[]).map(sw)]))}:pt),checkPhotos:Object.fromEntries(Object.entries(p.checkPhotos||{}).map(([k,a])=>[k,(a||[]).map(sw)])),albumPhotos:(p.albumPhotos||[]).map(sw),photoTrash:(p.photoTrash||[]).map(sw)};});
+    localStorage.setItem("dekigata_projects",JSON.stringify(slim));}catch(e){if(storageWarnSetter)storageWarnSetter(true);return false;}
+  if(storageWarnSetter)storageWarnSetter(true);return true;
+}
+async function sbListPhotos(projectId){
+  const out=[];for(let off=0;off<5000;off+=1000){const res=await fetch(`${SB_URL}/storage/v1/object/list/dekigata-photos`,{method:"POST",headers:sbHeaders,body:JSON.stringify({prefix:projectId,limit:1000,offset:off,sortBy:{column:"name",order:"asc"}})});if(!res.ok)throw new Error("list failed");const rows=await res.json();(rows||[]).forEach(r=>{if(r&&r.name&&r.id!==null)out.push(r);});if(!rows||rows.length<1000)break;}
+  return out;
+}
+async function sbFetchHistory(projectId){const res=await fetch(`${SB_URL}/rest/v1/dekigata_history?id=eq.${projectId}&select=hid,archived_at,updated_at,reason,n_points,n_photos,new_n_points,new_n_photos,by_device,by_ua&order=archived_at.desc&limit=200`,{headers:sbHeaders});if(!res.ok)throw new Error("history failed");return res.json();}
+async function sbFetchHistoryData(hid){const res=await fetch(`${SB_URL}/rest/v1/dekigata_history?hid=eq.${hid}&select=data`,{headers:sbHeaders});if(!res.ok)throw new Error("history failed");const rows=await res.json();return rows[0]?rows[0].data:null;}
+function fmtJst(iso){try{return new Date(iso).toLocaleString("ja-JP",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"});}catch(e){return String(iso||"");}}
+function tsDate(ts){const d=new Date(ts);return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
+function tsTime(ts){return new Date(ts).toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"});}
 async function sbFetchDeleted(){const res=await fetch(`${SB_URL}/rest/v1/dekigata_deleted?select=id`,{headers:sbHeaders});if(!res.ok)throw new Error("deleted fetch failed");const rows=await res.json();return new Set(rows.map(r=>r.id));}
 function getPendingDel(){try{return JSON.parse(localStorage.getItem("dekigata_pending_del")||"[]");}catch(e){return[];}}
 function setPendingDel(a){try{localStorage.setItem("dekigata_pending_del",JSON.stringify(a||[]));}catch(e){}}
@@ -728,7 +848,7 @@ async function sbDeleteProject(id){
   return res.ok;
 }
 // Storageのキーは英数字と . _ - のみ。日本語や記号はハッシュに置換
-function countBase64(d){let n=0;const isB=(ph)=>ph&&typeof ph.data==="string"&&ph.data.startsWith("data:");(d.points||[]).forEach(pt=>Object.values(pt.photos||{}).forEach(arr=>(arr||[]).forEach(ph=>{if(isB(ph))n++;})));(d.albumPhotos||[]).forEach(ph=>{if(isB(ph))n++;});Object.values(d.checkPhotos||{}).forEach(arr=>(arr||[]).forEach(ph=>{if(isB(ph))n++;}));return n;}
+function countBase64(d){let n=0;const isB=(ph)=>ph&&typeof ph.data==="string"&&(ph.data.startsWith("data:")||ph.data.startsWith("idb:"));(d.points||[]).forEach(pt=>Object.values(pt.photos||{}).forEach(arr=>(arr||[]).forEach(ph=>{if(isB(ph))n++;})));(d.albumPhotos||[]).forEach(ph=>{if(isB(ph))n++;});Object.values(d.checkPhotos||{}).forEach(arr=>(arr||[]).forEach(ph=>{if(isB(ph))n++;}));return n;}
 function hashStr(t){t=String(t||"");const samp=t.slice(0,4000)+"|"+t.length;let h=0;for(let i=0;i<samp.length;i++){h=(h*31+samp.charCodeAt(i))|0;}return "h"+(h>>>0).toString(36);}
 function safeKey(str){const t=String(str||"");if(/^[A-Za-z0-9._-]{1,40}$/.test(t))return t;let h=0;for(let i=0;i<t.length;i++){h=(h*31+t.charCodeAt(i))|0;}return "k"+(h>>>0).toString(36);}
 async function sbUploadPhoto(path,blob){
@@ -791,6 +911,11 @@ export default function App(){
   const[fontScale,setFontScale]=useState(()=>{try{const v=localStorage.getItem("dekigata_zoom");return v?Number(v):1.15;}catch(e){return 1.15;}});
   const setZoom=(z)=>{setFontScale(z);try{localStorage.setItem("dekigata_zoom",String(z));}catch(e){}};
   const[checkDims,setCheckDims]=useState({});
+  const[photoTrash,setPhotoTrash]=useState([]);
+  const[storageWarn,setStorageWarn]=useState(false);storageWarnSetter=setStorageWarn;
+  const[restoreOpen,setRestoreOpen]=useState(false);
+  const[rc,setRc]=useState({});
+  const[devLabel,setDevLabel]=useState(()=>deviceLabel());
   const[projects,setProjects]=useState([]);
   const[currentProjId,setCurrentProjId]=useState(null);
   const[loaded,setLoaded]=useState(false);
@@ -803,18 +928,18 @@ export default function App(){
   const dirtyRef=useRef(false);
   const lastAppliedRef=useRef(null);
   const stateRef=useRef({});
-  const normData=(d)=>{d=d||{};return{pipeType:d.pipeType||"DCIP",roadType:d.roadType||"shidou",surfaceType:d.surfaceType||"asphalt",header:d.header||{projectName:"",location:"",diameter:150},design:d.design||{},points:d.points||[],albumPhotos:d.albumPhotos||[],albumPositions:(d.albumPositions&&d.albumPositions.length)?d.albumPositions:["始点","中間点","終点"],checkItems:d.checkItems||[],checkPhotos:d.checkPhotos||{},checkNotes:d.checkNotes||{},checkDims:d.checkDims||{}};};
+  const normData=(d)=>{d=d||{};return stripTrashed({pipeType:d.pipeType||"DCIP",roadType:d.roadType||"shidou",surfaceType:d.surfaceType||"asphalt",header:d.header||{projectName:"",location:"",diameter:150},design:d.design||{},points:d.points||[],albumPhotos:d.albumPhotos||[],albumPositions:(d.albumPositions&&d.albumPositions.length)?d.albumPositions:["始点","中間点","終点"],checkItems:d.checkItems||[],checkPhotos:d.checkPhotos||{},checkNotes:d.checkNotes||{},checkDims:d.checkDims||{},photoTrash:Array.isArray(d.photoTrash)?d.photoTrash:[]});};
   const applyData=(d)=>{
     const n=normData(d);
     setPipeType(n.pipeType);setRoadType(n.roadType);setSurfaceType(n.surfaceType);
     setHeader(n.header);setDesign(n.design);setPoints(n.points);
     setAlbumPhotos(n.albumPhotos);setAlbumPositions(n.albumPositions);
-    setCheckItems(n.checkItems);setCheckPhotos(n.checkPhotos);setCheckNotes(n.checkNotes);setCheckDims(n.checkDims);
+    setCheckItems(n.checkItems);setCheckPhotos(n.checkPhotos);setCheckNotes(n.checkNotes);setCheckDims(n.checkDims);setPhotoTrash(n.photoTrash);
     lastAppliedRef.current=JSON.stringify(n);stateRef.current=n;
     return n;
   };
   const resetSync=()=>{snapRef.current={updatedAt:null,data:null};lastAppliedRef.current=null;dirtyRef.current=false;};
-  const mirrorLocal=(id,d,updatedAt,dirty)=>{setProjects(prev=>{const idx=prev.findIndex(p=>p.id===id);const rec={id,...d,updatedAt:updatedAt||new Date().toISOString(),localDirty:!!dirty};let next;if(idx<0)next=[...prev,rec];else{next=[...prev];next[idx]=rec;}try{localStorage.setItem("dekigata_projects",JSON.stringify(next));}catch(e){}return next;});};
+  const mirrorLocal=(id,d,updatedAt,dirty)=>{setProjects(prev=>{const idx=prev.findIndex(p=>p.id===id);const rec={id,...d,updatedAt:updatedAt||new Date().toISOString(),localDirty:!!dirty};let next;if(idx<0)next=[...prev,rec];else{next=[...prev];next[idx]=rec;}writeLocalProjects(next);return next;});};
 
   // 起動時: Supabase優先で読み込み、オフライン時はlocalStorage
   useEffect(()=>{
@@ -848,11 +973,11 @@ export default function App(){
           const proj={...lp,id:nid,localDirty:true};
           cloudProjects.push(proj);
           const{localDirty:_ld,...pd0}=proj;const pd=projToData(pd0);
-          if(!isEmptyProject(pd))sbInsertProject(nid,(proj.header&&proj.header.projectName)||"",pd).then(r=>{if(r&&r.deleted){setProjects(prev=>{const next=prev.filter(p=>p.id!==nid);try{localStorage.setItem("dekigata_projects",JSON.stringify(next));}catch(e){}return next;});}}).catch(()=>{});
+          if(!isEmptyProject(pd))sbInsertProject(nid,(proj.header&&proj.header.projectName)||"",pd).then(r=>{if(r&&r.deleted){setProjects(prev=>{const next=prev.filter(p=>p.id!==nid);writeLocalProjects(next);return next;});}}).catch(()=>{});
         }
         setProjects(cloudProjects);
         setSyncStatus("synced");
-        try{localStorage.setItem("dekigata_projects",JSON.stringify(cloudProjects));}catch(e){}
+        writeLocalProjects(cloudProjects);
         if(rescuedN>0)setRescueInfo(`この端末に残っていたデータから ${rescuedN}測点 を戻しました（自動でクラウドに保存します）`);
       }else{
         setProjects(local);
@@ -864,6 +989,34 @@ export default function App(){
     })();
   },[]);
 
+  const currentProjIdRef=useRef(null);currentProjIdRef.current=currentProjId;
+  // 端末の控え（IndexedDB）と突き合わせ: 画面・端末保存から消えた写真があれば元の場所へ戻す
+  const hydrateRef=useRef(null);
+  hydrateRef.current=async(pid)=>{
+    if(!pid)return;
+    const entries=await jAll(pid);
+    const now=Date.now();
+    const old=entries.filter(e=>e.syncedAt&&now-e.syncedAt>14*86400e3).map(e=>e.id);if(old.length)jDel(old);
+    const pending=entries.filter(e=>!e.syncedAt);
+    pending.forEach(e=>journalPendingRef.current.add(e.id));
+    if(!pending.length||currentProjIdRef.current!==pid)return;
+    const byId=new Map(pending.map(e=>[e.id,e]));
+    const D=JSON.parse(JSON.stringify(stateRef.current||{}));let filled=0;
+    const fill=(ph)=>{if(ph&&typeof ph.data==="string"&&ph.data.startsWith("idb:")){const e=byId.get(ph.data.slice(4));const v=e&&(e.url||e.data);if(v){filled++;return{...ph,data:v};}}return ph;};
+    D.points=(D.points||[]).map(pt=>pt&&pt.photos?{...pt,photos:Object.fromEntries(Object.entries(pt.photos).map(([k,a])=>[k,(a||[]).map(fill)]))}:pt);
+    D.checkPhotos=Object.fromEntries(Object.entries(D.checkPhotos||{}).map(([k,a])=>[k,(a||[]).map(fill)]));
+    D.albumPhotos=(D.albumPhotos||[]).map(fill);D.photoTrash=(D.photoTrash||[]).map(fill);
+    const present=new Set();const col=(ph)=>{if(ph&&ph.id)present.add(ph.id);};
+    (D.points||[]).forEach(pt=>Object.values((pt&&pt.photos)||{}).forEach(a=>(a||[]).forEach(col)));Object.values(D.checkPhotos||{}).forEach(a=>(a||[]).forEach(col));(D.albumPhotos||[]).forEach(col);(D.photoTrash||[]).forEach(col);
+    const missing=pending.filter(e=>!present.has(e.id)&&(e.url||e.data)).map(e=>({...e,data:e.url||e.data}));
+    const r=placePhotos(D,missing);
+    if(!filled&&!r.added)return;
+    if(currentProjIdRef.current!==pid)return;
+    const n=applyData(r.data);
+    dirtyRef.current=true;mirrorLocal(pid,n,null,true);
+    if(r.added)setRescueInfo(`この端末の控えから写真 ${r.added}枚 を元の場所に戻しました（自動でクラウドに保存します）`);
+    setTimeout(()=>{if(syncSaveRef.current)syncSaveRef.current();},300);
+  };
   // 現在のプロジェクトが変わったら復元
   useEffect(()=>{
     if(!loaded||!currentProjId)return;
@@ -878,12 +1031,13 @@ export default function App(){
       setInited(true);
       // 設定済みの工事は、いきなり入力画面から（工事情報→設計値を毎回通らない）
       setScreen(landingFor(n));
+      const pid=currentProjId;setTimeout(()=>{if(hydrateRef.current)hydrateRef.current(pid);},200);
     }
   // eslint-disable-next-line
   },[currentProjId,loaded]);
 
   // 現在の状態を常にrefに（保存処理が最新値を読むため）
-  stateRef.current={pipeType,roadType,surfaceType,header,design,points,albumPhotos,albumPositions,checkItems,checkPhotos,checkNotes,checkDims};
+  stateRef.current={pipeType,roadType,surfaceType,header,design,points,albumPhotos,albumPositions,checkItems,checkPhotos,checkNotes,checkDims,photoTrash};
 
   // クラウド保存: 条件付き更新 → 衝突したら取得→3wayマージ→再試行（他端末の入力を消さない）
   const savingRef=useRef(false);const rerunRef=useRef(false);
@@ -893,38 +1047,72 @@ export default function App(){
     savingRef.current=true;
     try{await syncSaveCore(id);}finally{savingRef.current=false;if(rerunRef.current){rerunRef.current=false;setTimeout(()=>{if(syncSaveRef.current)syncSaveRef.current();},300);}}
   };
+  // 端末内の写真（base64／控え"idb:"）を倉庫へ送る。ファイル名に測点・工程を入れる（倉庫だけでも組み直せる）
   const flushBase64=async(id,local)=>{
     let changed=false;let remain=0;const repl=new Map();
-    const up=async(dataUrl,tag)=>{try{const blob=await(await fetch(dataUrl)).blob();const u=await sbUploadPhoto(`${id}/${tag}_${Date.now()}_${Math.random().toString(36).slice(2,6)}.jpg`,blob);if(u)repl.set(dataUrl,u);return u;}catch(e){return null;}};
-    for(const pt of (local.points||[])){for(const k of Object.keys(pt.photos||{})){for(const ph of (pt.photos[k]||[])){if(ph&&typeof ph.data==="string"&&ph.data.startsWith("data:")){if(!ph.id)ph.id=hashStr(ph.data);const u=await up(ph.data,`${safeKey(pt.name)}_${safeKey(k)}`);if(u){ph.data=u;changed=true;}else remain++;}}}}
-    for(const ph of (local.albumPhotos||[])){if(ph&&typeof ph.data==="string"&&ph.data.startsWith("data:")){if(!ph.id)ph.id=hashStr(ph.data);const u=await up(ph.data,`album_${safeKey(ph.phase||"x")}`);if(u){ph.data=u;changed=true;}else remain++;}}
-    for(const k of Object.keys(local.checkPhotos||{})){for(const ph of (local.checkPhotos[k]||[])){if(ph&&typeof ph.data==="string"&&ph.data.startsWith("data:")){if(!ph.id)ph.id=hashStr(ph.data);const u=await up(ph.data,`check_${safeKey(k)}`);if(u){ph.data=u;changed=true;}else remain++;}}}
-    if(repl.size>0)setCur(p=>{const ph={...(p.photos||{})};let ch=false;for(const k of Object.keys(ph)){ph[k]=(ph[k]||[]).map(x=>(x&&repl.has(x.data))?(ch=true,{...x,data:repl.get(x.data)}):x);}return ch?{...p,photos:ph}:p;});
-    return{changed,remain};
+    const up=async(dataUrl,fname)=>{try{const blob=await(await fetch(dataUrl)).blob();return await sbUploadPhoto(`${id}/${fname}`,blob);}catch(e){return null;}};
+    let jmap=null;const jget=async(jid)=>{if(!jmap){jmap=new Map((await jAll(id)).map(e=>[e.id,e]));}return jmap.get(jid);};
+    const send=async(ph,ctx)=>{
+      if(!ph||typeof ph.data!=="string")return;
+      const key=ph.data;
+      if(key.startsWith("idb:")){const e=await jget(key.slice(4));
+        if(e&&e.url){ph.data=e.url;repl.set(key,e.url);changed=true;return;}
+        if(e&&typeof e.data==="string"&&e.data.startsWith("data:")){const u=await up(e.data,photoFileName(ctx));if(u){ph.data=u;repl.set(key,u);changed=true;jPatch(e.id,{url:u});}else remain++;return;}
+        remain++;return;}
+      if(!key.startsWith("data:"))return;
+      if(!ph.id)ph.id=hashStr(key);
+      const u=await up(key,photoFileName(ctx));
+      if(u){ph.data=u;repl.set(key,u);changed=true;jPatch(ph.id,{url:u});}else remain++;
+    };
+    for(const pt of (local.points||[])){for(const k of Object.keys(pt.photos||{})){for(const ph of (pt.photos[k]||[]))await send(ph,{kind:"pt",point:pt.name,step:k});}}
+    for(const ph of (local.albumPhotos||[]))await send(ph,{kind:"al",phase:ph.phase,position:ph.position});
+    for(const k of Object.keys(local.checkPhotos||{})){for(const ph of (local.checkPhotos[k]||[]))await send(ph,{kind:"ck",item:k});}
+    for(const t of (local.photoTrash||[]))await send(t,t.kind==="ck"?{kind:"ck",item:t.item}:t.kind==="al"?{kind:"al",phase:t.phase,position:t.position}:{kind:"pt",point:t.point,step:t.step});
+    return{changed,remain,repl};
   };
+  // URLへの置き換えを「今の状態」にだけ当てる（保存中に撮った写真・入力を上書きで消さない）
+  const replPhotos=(arr,repl)=>{if(!Array.isArray(arr))return arr;let ch=false;const out=arr.map(x=>{if(x&&typeof x.data==="string"&&repl.has(x.data)){ch=true;return{...x,data:repl.get(x.data)};}return x;});return ch?out:arr;};
+  const replPhotoMap=(m,repl)=>{if(!m)return m;let ch=false;const out={};Object.keys(m).forEach(k=>{const a=replPhotos(m[k],repl);if(a!==m[k])ch=true;out[k]=a;});return ch?out:m;};
+  const replPoints=(pts,repl)=>{if(!Array.isArray(pts))return pts;let ch=false;const out=pts.map(pt=>{if(!pt||!pt.photos)return pt;const ph=replPhotoMap(pt.photos,repl);if(ph===pt.photos)return pt;ch=true;return{...pt,photos:ph};});return ch?out:pts;};
+  const replData=(d,repl)=>({...d,points:replPoints(d.points,repl),checkPhotos:replPhotoMap(d.checkPhotos,repl),albumPhotos:replPhotos(d.albumPhotos,repl),photoTrash:replPhotos(d.photoTrash,repl)});
+  const applyRepl=(repl)=>{if(!repl||!repl.size)return;
+    setPoints(p=>replPoints(p,repl));setCheckPhotos(m=>replPhotoMap(m,repl));setAlbumPhotos(a=>replPhotos(a,repl));setPhotoTrash(t=>replPhotos(t,repl));
+    setCur(p=>{if(!p||!p.photos)return p;const ph=replPhotoMap(p.photos,repl);return ph===p.photos?p:{...p,photos:ph};});};
+  // クラウドへ送る中身: 倉庫にまだ無い写真（base64・控え）は入れない（DBが重くならない。次の送信で入る）
+  const forCloud=(d)=>{const ok=(ph)=>!(ph&&typeof ph.data==="string"&&(ph.data.startsWith("data:")||ph.data.startsWith("idb:")));const keep=(a)=>Array.isArray(a)?a.filter(ok):a;
+    return{...d,points:(d.points||[]).map(pt=>pt&&pt.photos?{...pt,photos:Object.fromEntries(Object.entries(pt.photos).map(([k,a])=>[k,keep(a)]))}:pt),checkPhotos:Object.fromEntries(Object.entries(d.checkPhotos||{}).map(([k,a])=>[k,keep(a)])),albumPhotos:keep(d.albumPhotos||[]),photoTrash:keep(d.photoTrash||[])};};
+  // 端末の控え: クラウドに届いた写真は、控えから写真本体を外す（2週間後に記録ごと消す）
+  const journalPendingRef=useRef(new Set());
+  const markJournalSynced=(d)=>{const pend=journalPendingRef.current;if(!pend.size)return;const done=[];const chk=(ph)=>{if(ph&&ph.id&&pend.has(ph.id)&&photoUrlOf(ph))done.push(ph.id);};
+    (d.points||[]).forEach(pt=>Object.values((pt&&pt.photos)||{}).forEach(a=>(a||[]).forEach(chk)));Object.values(d.checkPhotos||{}).forEach(a=>(a||[]).forEach(chk));(d.albumPhotos||[]).forEach(chk);(d.photoTrash||[]).forEach(chk);
+    done.forEach(id=>{pend.delete(id);jPatch(id,{syncedAt:Date.now(),data:null});});};
   const syncSaveCore=async(id)=>{
     try{
       // 未送信(base64)写真を先にStorageへ → DBには URL だけを入れる
       const work=JSON.parse(JSON.stringify(stateRef.current));
       const fl=await flushBase64(id,work);
-      setUnsynced(fl.remain);
-      if(fl.changed){applyData(work);}
-      if(JSON.stringify(work).length>2500000){setSyncStatus("offline");setToast(`写真${fl.remain}枚が未送信（電波を確認）`);setTimeout(()=>setToast(""),3000);return;}
-      let local=fl.changed?work:stateRef.current;let snap=snapRef.current;
+      // 送れた写真はURLに置き換え（今の状態に当てるだけ。保存中に撮った写真は消さない）
+      let local=fl.repl.size?replData(stateRef.current,fl.repl):stateRef.current;
+      if(fl.repl.size){applyRepl(fl.repl);lastAppliedRef.current=JSON.stringify(local);}
+      setUnsynced(countBase64(local));
+      let snap=snapRef.current;
       // 保存ガード: 測点が減った状態は絶対にクラウドへ送らない（消えた測点を戻してから送る）
       const g=guardLostPoints(local,snap.data);
       if(g){local=g.data;applyData(local);stateRef.current=local;setRescueInfo(`消えかけた ${g.restored}測点 を元に戻しました`);}
       if(!snap.updatedAt&&isEmptyProject(local)){setSyncStatus("synced");return;}
+      const saved=(row,payload)=>{snapRef.current={updatedAt:row.updated_at,data:payload};const pend=countBase64(local)>0;dirtyRef.current=pend;lastAppliedRef.current=JSON.stringify(normData(local));mirrorLocal(id,local,row.updated_at,pend);markJournalSynced(payload);setSyncStatus(pend?"offline":"synced");};
       for(let attempt=0;attempt<3;attempt++){
         const name=(local.header&&local.header.projectName)||"";
+        const payload=forCloud(local);
+        if(JSON.stringify(payload).length>2500000){setSyncStatus("offline");setToast("データが大きすぎて送れません（写真以外を確認）");setTimeout(()=>setToast(""),3000);return;}
         let r;
-        if(snap.updatedAt)r=await sbConditionalUpdate(id,name,local,snap.updatedAt);
-        else r=await sbInsertProject(id,name,local);
-        if(r.ok){snapRef.current={updatedAt:r.row.updated_at,data:local};dirtyRef.current=false;lastAppliedRef.current=JSON.stringify(normData(local));mirrorLocal(id,local,r.row.updated_at,false);setSyncStatus("synced");return;}
+        if(snap.updatedAt)r=await sbConditionalUpdate(id,name,payload,snap.updatedAt);
+        else r=await sbInsertProject(id,name,payload);
+        if(r.ok){saved(r.row,payload);return;}
         if(r.deleted){handleRemoteDeleted();return;}
         // 衝突: クラウドの最新を取ってマージ
         const cloudRow=await sbFetchProject(id);
-        if(!cloudRow){const ins=await sbInsertProject(id,name,local);if(ins.ok){snapRef.current={updatedAt:ins.row.updated_at,data:local};dirtyRef.current=false;lastAppliedRef.current=JSON.stringify(normData(local));mirrorLocal(id,local,ins.row.updated_at,false);setSyncStatus("synced");return;}if(ins.deleted){handleRemoteDeleted();return;}continue;}
+        if(!cloudRow){const ins=await sbInsertProject(id,name,payload);if(ins.ok){saved(ins.row,payload);return;}if(ins.deleted){handleRemoteDeleted();return;}continue;}
         const merged=mergeProjectData(local,cloudRow.data||{},snap.data||{});
         applyData(merged);
         snapRef.current={updatedAt:cloudRow.updated_at,data:cloudRow.data||{}};
@@ -946,7 +1134,7 @@ export default function App(){
     if(syncTimer.current)clearTimeout(syncTimer.current);
     syncTimer.current=setTimeout(()=>{if(syncSaveRef.current)syncSaveRef.current();},2000);
   // eslint-disable-next-line
-  },[header,design,points,albumPhotos,albumPositions,checkItems,checkPhotos,checkNotes,checkDims,pipeType,roadType,surfaceType,loaded,inited,currentProjId]);
+  },[header,design,points,albumPhotos,albumPositions,checkItems,checkPhotos,checkNotes,checkDims,photoTrash,pipeType,roadType,surfaceType,loaded,inited,currentProjId]);
 
   // 前面復帰・一覧に戻った時・回線復帰: クラウドの最新を取り込む（未保存があればマージ）
   const refreshRef=useRef(null);
@@ -1000,7 +1188,7 @@ export default function App(){
         const prevMap=new Map(prev.map(p=>[p.id,p]));
         const out=cloud.map(c=>{const lp=prevMap.get(c.id);if(lp&&(lp.localDirty||lp.id===currentProjId))return lp;if(lp){const rs=rescueMerge(lp,c);if(rs)return{...rs.data,id:c.id,updatedAt:c.updatedAt,localDirty:true};}return c;});
         prev.forEach(lp=>{if(cloudIds.has(lp.id)||deleted.has(lp.id))return;if(lp.localDirty||lp.id===currentProjId)out.push(lp);});
-        try{localStorage.setItem("dekigata_projects",JSON.stringify(out));}catch(e){}
+        writeLocalProjects(out);
         return out;
       });
       if(currentProjId&&deleted.has(currentProjId))handleRemoteDeleted();
@@ -1048,7 +1236,7 @@ export default function App(){
     setCurrentProjId(id);localStorage.setItem("dekigata_currentId",id);
     setPipeType("DCIP");setRoadType("shidou");setSurfaceType("asphalt");
     setHeader({projectName:"",location:"",diameter:150,projectType:""});
-    setDesign({});setPoints([]);setAlbumPhotos([]);setAlbumPositions(["始点","中間点","終点"]);setCheckItems([]);setCheckPhotos({});setCheckNotes({});setCheckDims({});setInited(false);
+    setDesign({});setPoints([]);setAlbumPhotos([]);setAlbumPositions(["始点","中間点","終点"]);setCheckItems([]);setCheckPhotos({});setCheckNotes({});setCheckDims({});setPhotoTrash([]);setInited(false);
     setScreen("setup");setShowProjList(false);
     setToast("新規プロジェクト作成");setTimeout(()=>setToast(""),2000);
   };
@@ -1058,7 +1246,7 @@ export default function App(){
     setShowProjList(false);setScreen("setup");
     setToast("プロジェクト切替");setTimeout(()=>setToast(""),2000);
   };
-  const startBlankState=()=>{setHeader({projectName:"",location:"",diameter:150,projectType:""});setDesign({});setPoints([]);setAlbumPhotos([]);setAlbumPositions(["始点","中間点","終点"]);setCheckItems([]);setCheckPhotos({});setCheckNotes({});setCheckDims({});setInited(false);};
+  const startBlankState=()=>{setHeader({projectName:"",location:"",diameter:150,projectType:""});setDesign({});setPoints([]);setAlbumPhotos([]);setAlbumPositions(["始点","中間点","終点"]);setCheckItems([]);setCheckPhotos({});setCheckNotes({});setCheckDims({});setPhotoTrash([]);setInited(false);};
   const switchAwayFrom=(removedIds)=>{
     if(syncTimer.current)clearTimeout(syncTimer.current);
     const remaining=projects.filter(p=>!removedIds.has(p.id));
@@ -1071,7 +1259,7 @@ export default function App(){
   const handleRemoteDeleted=()=>{
     const id=currentProjId;if(!id)return;
     try{if(dirtyRef.current){const o=JSON.parse(localStorage.getItem("dekigata_orphans")||"[]");o.unshift({id,savedAt:new Date().toISOString(),data:stateRef.current});localStorage.setItem("dekigata_orphans",JSON.stringify(o.slice(0,5)));}}catch(e){}
-    setProjects(prev=>{const next=prev.filter(p=>p.id!==id);try{localStorage.setItem("dekigata_projects",JSON.stringify(next));}catch(e){}return next;});
+    setProjects(prev=>{const next=prev.filter(p=>p.id!==id);writeLocalProjects(next);return next;});
     switchAwayFrom(new Set([id]));
     setToast("この工事は他の端末で削除されました");setTimeout(()=>setToast(""),3500);
   };
@@ -1079,7 +1267,7 @@ export default function App(){
     const idset=new Set(ids);const fail=[];
     for(const id of ids){let ok=false;try{ok=await sbDeleteProject(id);}catch(e){}if(!ok)fail.push(id);}
     if(fail.length){const a=getPendingDel();fail.forEach(id=>{if(!a.includes(id))a.push(id);});setPendingDel(a);}
-    setProjects(prev=>{const next=prev.filter(p=>!idset.has(p.id));try{localStorage.setItem("dekigata_projects",JSON.stringify(next));}catch(e){}return next;});
+    setProjects(prev=>{const next=prev.filter(p=>!idset.has(p.id));writeLocalProjects(next);return next;});
     if(idset.has(currentProjId))switchAwayFrom(idset);
     return{n:ids.length,pend:fail.length};
   };
@@ -1125,7 +1313,131 @@ export default function App(){
   const selRoad=(k)=>{if(k===roadType)return;if(!typeChangeOk())return;setRoadType(k);applyTypeDefaults(pipeType,k,surfaceType);};
   const selSurface=(k)=>{if(k===surfaceType)return;if(!typeChangeOk())return;setSurfaceType(k);applyTypeDefaults(pipeType,roadType,k);};
   const bulkCreate=()=>{const pts=[];for(let i=0;i<bulkCount;i++)pts.push({name:`No.${i}`,date:"",measured:{},photos:{},dates:{}});setPoints(p=>(p&&p.length)?p:pts);};
-  const rescueBanner=rescueInfo?(<div onClick={()=>setRescueInfo("")} style={{background:"#E8F5E9",border:"2px solid #2E7D32",borderRadius:10,padding:"10px 12px",margin:"0 4px 10px",fontSize:14,fontWeight:700,color:"#1B5E20",cursor:"pointer"}}>✅ {rescueInfo}<div style={{fontSize:11,fontWeight:500,color:"#555",marginTop:2}}>（タップで閉じる）</div></div>):null;
+  const rescueBanner=(<>{rescueInfo?(<div onClick={()=>setRescueInfo("")} style={{background:"#E8F5E9",border:"2px solid #2E7D32",borderRadius:10,padding:"10px 12px",margin:"0 4px 10px",fontSize:14,fontWeight:700,color:"#1B5E20",cursor:"pointer"}}>✅ {rescueInfo}<div style={{fontSize:11,fontWeight:500,color:"#555",marginTop:2}}>（タップで閉じる）</div></div>):null}
+    {storageWarn&&<div style={{background:"#FFEBEE",border:"1.5px solid #C62828",borderRadius:10,padding:"8px 12px",margin:"0 4px 10px",fontSize:13,fontWeight:700,color:"#B71C1C"}}>⚠ この端末の保存領域がいっぱいです。撮った写真は端末の控えに保存済み。電波のある所で開いて同期してください</div>}</>);
+
+  // ═══ 🛟 復元センター ═══
+  const commitData=(d,msg)=>{const n=applyData(d);dirtyRef.current=true;mirrorLocal(currentProjId,n,null,true);if(msg)setRescueInfo(msg);setTimeout(()=>{if(syncSaveRef.current)syncSaveRef.current();},300);};
+  const stepLabel=(sid)=>{const s=mergedSteps.find(x=>String(x.id)===String(sid))||steps.find(x=>String(x.id)===String(sid));return s?(s.photoOnly?s.name:`${s.id}.${s.name}`):`工程${sid}`;};
+  const whereLabel=(o)=>o.kind==="ck"?`チェック「${o.item||"?"}」`:o.kind==="al"?`台帳 ${o.phase==="comp"?"完成":"着手前"}・${o.position||"位置不明"}`:`${o.point||"?"}・${stepLabel(o.step)}`;
+  const openRestore=()=>{setShowProjList(false);setRc({});setRestoreOpen(true);};
+  const rcScanStorage=async()=>{
+    const pid=currentProjId;if(!pid)return;
+    setRc(r=>({...r,scanLoading:true,scanErr:null}));
+    try{
+      const files=await sbListPhotos(pid);
+      const d=stateRef.current;const linked=new Set();const col=(ph)=>{const u=photoUrlOf(ph);if(u)linked.add(u);};
+      (d.points||[]).forEach(pt=>Object.values((pt&&pt.photos)||{}).forEach(a=>(a||[]).forEach(col)));Object.values(d.checkPhotos||{}).forEach(a=>(a||[]).forEach(col));(d.albumPhotos||[]).forEach(col);(d.photoTrash||[]).forEach(col);
+      const known={points:(d.points||[]).map(p=>p&&p.name).filter(Boolean),steps:[...new Set([...mergedSteps,...steps].map(s=>String(s.id)))],items:d.checkItems||[]};
+      const urlOf=(name)=>`${SB_URL}/storage/v1/object/public/dekigata-photos/${pid}/${name}`;
+      const place=(p)=>p.kind==="ck"?`ck|${p.item}`:p.kind==="al"?`al|${p.phase}|${p.position||""}`:`pt|${p.point}|${p.step}`;
+      const parsed=files.map(f=>({name:f.name,url:urlOf(f.name),size:(f.metadata&&f.metadata.size)||0,p:parsePhotoName(f.name,known)}));
+      const seen=new Set();parsed.filter(x=>linked.has(x.url)&&x.p).forEach(x=>{if(x.size)seen.add(place(x.p)+"|"+x.size);});
+      const orphans=[],dups=[],unknown=[];
+      parsed.filter(x=>!linked.has(x.url)).sort((a,b)=>((a.p&&a.p.ts)||0)-((b.p&&b.p.ts)||0)).forEach(x=>{
+        const p=x.p;if(!p||(p.kind==="pt"&&(!p.point||!p.step))||(p.kind==="ck"&&!p.item)){unknown.push(x);return;}
+        const k=place(p)+"|"+x.size;if(x.size&&seen.has(k)){dups.push(x);return;}seen.add(k);orphans.push(x);});
+      setRc(r=>({...r,scanLoading:false,scanned:true,total:files.length,orphans,dups,unknown,sel:Object.fromEntries(orphans.map(o=>[o.url,true]))}));
+    }catch(e){setRc(r=>({...r,scanLoading:false,scanErr:"倉庫を読めませんでした（電波を確認してもう一度）"}));}
+  };
+  const rcImportOrphans=()=>{
+    const pick=(rc.orphans||[]).filter(o=>rc.sel&&rc.sel[o.url]);if(!pick.length)return;
+    const entries=pick.map(o=>({kind:o.p.kind,point:o.p.point,step:o.p.step,item:o.p.item,phase:o.p.phase,position:o.p.position,data:o.url,id:hashStr(o.url),time:tsTime(o.p.ts),date:tsDate(o.p.ts),restored:"storage"}));
+    const r=placePhotos(stateRef.current,entries);
+    if(!r.added){setToast("取り込む写真はありませんでした");setTimeout(()=>setToast(""),2500);return;}
+    commitData(r.data,`倉庫の写真 ${r.added}枚 を元の測点・工程に戻しました${r.newPoints?`（測点${r.newPoints}つ追加）`:""}`);
+    setRc(r0=>({...r0,orphans:(r0.orphans||[]).filter(o=>!(r0.sel&&r0.sel[o.url])),sel:{}}));
+  };
+  const rcLoadHistory=async()=>{setRc(r=>({...r,histLoading:true,histErr:null}));try{const rows=await sbFetchHistory(currentProjId);setRc(r=>({...r,histLoading:false,history:rows||[]}));}catch(e){setRc(r=>({...r,histLoading:false,histErr:"履歴を読めませんでした（電波を確認）"}));}};
+  const rcRestoreVersion=async(row)=>{
+    try{const old=await sbFetchHistoryData(row.hid);if(!old)return;
+      const r=additiveRestore(stateRef.current,old);
+      if(!r.addP&&!r.addPh&&!r.addV){setToast("この版から戻せる分はありませんでした（今の方がそろっています）");setTimeout(()=>setToast(""),3000);return;}
+      if(!window.confirm(`${fmtJst(row.archived_at)} の版から\n測点 ${r.addP}・写真 ${r.addPh}枚・入力値 ${r.addV}件 を足します。\n（今の入力は上書きしません）`))return;
+      commitData(r.data,`${fmtJst(row.archived_at)} の版から 測点${r.addP}・写真${r.addPh}枚・入力値${r.addV}件 を戻しました`);
+    }catch(e){setToast("履歴を読めませんでした");setTimeout(()=>setToast(""),2500);}
+  };
+  const rcRestoreTrash=(t)=>{
+    const now=new Date().toISOString();const d=JSON.parse(JSON.stringify(stateRef.current));
+    d.photoTrash=(d.photoTrash||[]).map(x=>trashKeyOf(x)===trashKeyOf(t)?{...x,restoredAt:now}:x);
+    const r=placePhotos(d,[{kind:t.kind,point:t.point,step:t.step,item:t.item,phase:t.phase,position:t.position,data:t.data,id:t.id,time:t.time,note:t.note}]);
+    commitData(r.data,`ゴミ箱から写真を戻しました（${whereLabel(t)}）`);
+  };
+  const rcJournal=async()=>{const all=await jAll(currentProjId);setRc(r=>({...r,journal:{total:all.length,pending:all.filter(e=>!e.syncedAt).length}}));};
+  const rcExport=()=>{try{const d={app:"dekigata",v:APP_VERSION,exportedAt:new Date().toISOString(),device:deviceLabel(),id:currentProjId,data:forCloud(stateRef.current)};const blob=new Blob([JSON.stringify(d)],{type:"application/json"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=`出来形_${String(header.projectName||"工事").slice(0,24)}_${today()}.json`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);setToast("バックアップを保存しました");setTimeout(()=>setToast(""),2500);}catch(e){setToast("保存できませんでした");setTimeout(()=>setToast(""),2500);}};
+  const importRef=useRef(null);
+  const rcImportFile=(e)=>{const f=e.target.files&&e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const j=JSON.parse(String(rd.result||""));const old=j&&j.app==="dekigata"&&j.data?j.data:null;if(!old)throw new Error("bad");
+      const r=additiveRestore(stateRef.current,old);if(!r.addP&&!r.addPh&&!r.addV){setToast("このファイルから戻せる分はありませんでした");setTimeout(()=>setToast(""),3000);return;}
+      if(!window.confirm(`バックアップ（${fmtJst(j.exportedAt)}）から\n測点 ${r.addP}・写真 ${r.addPh}枚・入力値 ${r.addV}件 を足します。\n（今の入力は上書きしません）`))return;
+      commitData(r.data,`バックアップから 測点${r.addP}・写真${r.addPh}枚・入力値${r.addV}件 を戻しました`);}catch(err){setToast("出来形かんたんのバックアップファイルではありません");setTimeout(()=>setToast(""),3000);}};rd.readAsText(f);e.target.value="";};
+  const renameDevice=()=>{const v=window.prompt("この端末の名前（履歴に残ります。例：現場iPad、洋一iPhone）",devLabel);if(v===null)return;const t=v.trim().slice(0,20);try{if(t)localStorage.setItem("dekigata_device_label",t);else localStorage.removeItem("dekigata_device_label");}catch(e){}setDevLabel(deviceLabel());};
+  const reasonLabel={periodic:"定期",points_down:"測点が減る更新の前",photos_down:"写真が減る更新の前",guard:"🛡 測点の消去を防いだ"};
+  const rcBox={background:"#fff",border:"1px solid #ddd",borderRadius:12,padding:12,marginBottom:12};
+  const rcBtn={padding:"10px 14px",fontSize:14,fontWeight:700,borderRadius:10,border:"1.5px solid #1565C0",background:"#E3F2FD",color:"#1565C0",cursor:"pointer"};
+  const restoreCenter=restoreOpen?createPortal(
+    <div style={{position:"fixed",inset:0,background:"#f4f6f8",zIndex:10001,overflowY:"auto",WebkitOverflowScrolling:"touch",fontFamily:'"Helvetica Neue","Hiragino Sans",sans-serif',WebkitTextSizeAdjust:"100%"}}>
+      <div style={{maxWidth:560,margin:"0 auto",padding:"12px 12px 60px"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+          <h2 style={{fontSize:19,fontWeight:800,margin:0}}>🛟 復元センター</h2>
+          <button onClick={()=>setRestoreOpen(false)} style={{...rcBtn,background:"#fff",color:"#555",border:"1px solid #ccc"}}>閉じる</button></div>
+        <div style={{fontSize:13,fontWeight:700,color:"#333",marginBottom:4}}>{header.projectName||"(名称未設定)"}</div>
+        <div style={{fontSize:12,color:"#666",marginBottom:12,lineHeight:1.6}}>写真ファイルは倉庫から消えません。消した写真はゴミ箱へ。クラウドには上書き前の版が10分ごとに残ります。どれも「足りない分を足す」だけで、今の入力は上書きしません。</div>
+        {rescueInfo&&<div style={{...rcBox,background:"#E8F5E9",border:"2px solid #2E7D32",color:"#1B5E20",fontWeight:700,fontSize:14}}>✅ {rescueInfo}</div>}
+
+        <div style={rcBox}><div style={{fontSize:15,fontWeight:800,marginBottom:6}}>① 倉庫の写真と照合</div>
+          <div style={{fontSize:12,color:"#666",marginBottom:8}}>倉庫にあるのに、この工事に入っていない写真を探して元の測点・工程に戻します。</div>
+          <button style={rcBtn} disabled={rc.scanLoading} onClick={rcScanStorage}>{rc.scanLoading?"調べています…":rc.scanned?"もう一度調べる":"調べる"}</button>
+          {rc.scanErr&&<div style={{color:"#C62828",fontSize:13,marginTop:6}}>{rc.scanErr}</div>}
+          {rc.scanned&&<div style={{marginTop:10}}>
+            <div style={{fontSize:13,fontWeight:700}}>倉庫の写真 {rc.total}枚 のうち、入っていない写真 {(rc.orphans||[]).length}枚</div>
+            {(rc.dups||[]).length>0&&<div style={{fontSize:12,color:"#888"}}>同じ写真の二重送信 {(rc.dups||[]).length}枚 は取り込みません</div>}
+            {(rc.unknown||[]).length>0&&<div style={{fontSize:12,color:"#888"}}>場所が分からない写真 {(rc.unknown||[]).length}枚（今の工程にない）</div>}
+            {(rc.orphans||[]).map(o=>(<label key={o.url} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid #eee",cursor:"pointer"}}>
+              <input type="checkbox" checked={!!(rc.sel&&rc.sel[o.url])} onChange={e=>{const on=e.target.checked;setRc(r=>({...r,sel:{...(r.sel||{}),[o.url]:on}}));}} style={{width:22,height:22}}/>
+              <img src={o.url} onClick={(ev)=>{ev.preventDefault();setViewPhoto(o.url);}} style={{width:64,height:48,objectFit:"cover",borderRadius:6,background:"#ddd"}}/>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:700}}>{whereLabel(o.p)}</div><div style={{fontSize:12,color:"#666"}}>{fmtJst(o.p.ts)} 撮影分</div></div></label>))}
+            {(rc.orphans||[]).length>0&&<button style={{...rcBtn,width:"100%",marginTop:10,background:"#1565C0",color:"#fff"}} onClick={rcImportOrphans}>チェックした {(rc.orphans||[]).filter(o=>rc.sel&&rc.sel[o.url]).length}枚 を取り込む</button>}
+          </div>}
+        </div>
+
+        <div style={rcBox}><div style={{fontSize:15,fontWeight:800,marginBottom:6}}>② クラウドの履歴（上書き前の版）</div>
+          <div style={{fontSize:12,color:"#666",marginBottom:8}}>選んだ時点の版から、今足りない測点・写真・入力値だけを足します。</div>
+          <button style={rcBtn} disabled={rc.histLoading} onClick={rcLoadHistory}>{rc.histLoading?"読み込み中…":rc.history?"更新":"履歴を見る"}</button>
+          {rc.histErr&&<div style={{color:"#C62828",fontSize:13,marginTop:6}}>{rc.histErr}</div>}
+          {rc.history&&rc.history.length===0&&<div style={{fontSize:13,color:"#888",marginTop:8}}>まだ履歴はありません（保存のたびに10分ごとに残ります）</div>}
+          {(rc.history||[]).map(h=>(<div key={h.hid} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid #eee"}}>
+            <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:700}}>{fmtJst(h.archived_at)} <span style={{fontSize:12,fontWeight:600,color:h.reason==="guard"?"#C62828":"#666"}}>{reasonLabel[h.reason]||h.reason}</span></div>
+              <div style={{fontSize:12,color:"#666"}}>測点{h.n_points}・写真{h.n_photos}枚{h.new_n_points!==null&&h.new_n_points!==undefined?` → 上書き後 測点${h.new_n_points}・写真${h.new_n_photos}枚`:""}{h.by_device?`（${h.by_device}）`:h.by_ua?`（${uaKind(h.by_ua)}）`:""}</div></div>
+            <button style={{...rcBtn,padding:"8px 10px",fontSize:13}} onClick={()=>rcRestoreVersion(h)}>足りない分を戻す</button></div>))}
+        </div>
+
+        <div style={rcBox}><div style={{fontSize:15,fontWeight:800,marginBottom:6}}>③ ゴミ箱（消した写真）</div>
+          {(()=>{const list=(photoTrash||[]).filter(trashActive).slice().sort((a,b)=>String(b.deletedAt).localeCompare(String(a.deletedAt)));
+            if(!list.length)return(<div style={{fontSize:13,color:"#888"}}>ゴミ箱は空です</div>);
+            return list.map(t=>(<div key={trashKeyOf(t)} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid #eee"}}>
+              <img src={t.data} onClick={()=>setViewPhoto(t.data)} style={{width:64,height:48,objectFit:"cover",borderRadius:6,background:"#ddd"}}/>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:700}}>{whereLabel(t)}</div><div style={{fontSize:12,color:"#666"}}>{fmtJst(t.deletedAt)} に削除{t.by?`（${t.by}）`:""}</div></div>
+              <button style={{...rcBtn,padding:"8px 12px"}} onClick={()=>rcRestoreTrash(t)}>戻す</button></div>));})()}
+        </div>
+
+        <div style={rcBox}><div style={{fontSize:15,fontWeight:800,marginBottom:6}}>④ この端末の控え</div>
+          <div style={{fontSize:12,color:"#666",marginBottom:8}}>この端末で撮った写真は、クラウドに届いたと確認できるまで端末にも別に保存しています。開くたびに自動で照合します。</div>
+          <button style={rcBtn} onClick={async()=>{await rcJournal();if(hydrateRef.current)await hydrateRef.current(currentProjId);await rcJournal();}}>今すぐ照合</button>
+          {rc.journal&&<div style={{fontSize:13,marginTop:8}}>控え {rc.journal.total}件（クラウド未確認 {rc.journal.pending}件）</div>}
+        </div>
+
+        <div style={rcBox}><div style={{fontSize:15,fontWeight:800,marginBottom:6}}>⑤ バックアップ</div>
+          <div style={{fontSize:12,color:"#666",marginBottom:8}}>工事のデータ（写真の場所・入力値）をファイルに保存。写真そのものは倉庫にあります。</div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            <button style={rcBtn} onClick={rcExport}>ファイルに保存</button>
+            <button style={rcBtn} onClick={()=>importRef.current&&importRef.current.click()}>ファイルから戻す</button>
+            <input ref={importRef} type="file" accept="application/json,.json" style={{display:"none"}} onChange={rcImportFile}/></div>
+        </div>
+        <div style={{fontSize:12,color:"#888",textAlign:"center"}}>この端末の名前：{devLabel}　<button onClick={renameDevice} style={{...S.sm,fontSize:12}}>変更</button></div>
+      </div>
+      {viewPhoto&&(<div onClick={()=>setViewPhoto(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:10002,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}><img src={viewPhoto} style={{maxWidth:"100%",maxHeight:"90vh",borderRadius:12}}/></div>)}
+      {toast&&<div style={{...S.to,zIndex:10003}}>{toast}</div>}
+    </div>,document.body):null;
   const editPoint=(i)=>{const p=JSON.parse(JSON.stringify(points[i]));if(!p.photos)p.photos={};setCur(p);setEditIdx(i);setScreen("entry");};
   const savePoint=()=>{if(editIdx!==null)setPoints(p=>{const n=[...p];n[editIdx]={...cur};return n;});setScreen("list");};
   // 測点編集中は cur の変更を即 points に反映（=自動保存→クラウドへ）。保存ボタン待ちで消える事故を構造で防ぐ
@@ -1163,10 +1475,18 @@ export default function App(){
   // 保存: 写真をいったん端末内データで反映 → 自動同期が倉庫(Storage)へ送ってURLに置き換える
   const applyShot=(t,data)=>{
     const rec={id:genUUID(),data,time:nowTime()};
-    if(t.kind==="check"){setCheckPhotos(p=>({...p,[t.checkTarget]:[...(p[t.checkTarget]||[]),{...rec,note:t.note}]}));}
-    else if(t.kind==="album"){setAlbumPhotos(p=>[...p,{...rec,phase:t.album.phase,position:t.album.position}]);}
-    else{const sid=t.photoStep;setCur(p=>{const ph={...(p.photos||{})};ph[sid]=[...(ph[sid]||[]),rec];const ds={...(p.dates||{})};if(!ds[sid])ds[sid]=today();return{...p,photos:ph,dates:ds,date:p.date||today()};});}
+    // 端末の控えにも同時に保存（クラウドに届いたと確認できるまで消さない）
+    const jb={id:rec.id,projectId:currentProjId,time:rec.time,date:today(),data,url:null,createdAt:Date.now(),syncedAt:null,device:deviceLabel()};
+    journalPendingRef.current.add(rec.id);
+    // 端末の保存がいっぱいの時は、控えへの保存が終わってから端末保存をやり直す（写真は控え参照に置き換わる）
+    const afterJ=(ok)=>{if(ok&&localWriteFull)setTimeout(()=>{mirrorLocal(currentProjIdRef.current,stateRef.current,null,true);},50);};
+    if(t.kind==="check"){jPut({...jb,kind:"ck",item:t.checkTarget,note:t.note||""}).then(afterJ);setCheckPhotos(p=>({...p,[t.checkTarget]:[...(p[t.checkTarget]||[]),{...rec,note:t.note}]}));}
+    else if(t.kind==="album"){jPut({...jb,kind:"al",phase:t.album.phase,position:t.album.position}).then(afterJ);setAlbumPhotos(p=>[...p,{...rec,phase:t.album.phase,position:t.album.position}]);}
+    else{const sid=t.photoStep;jPut({...jb,kind:"pt",point:cur.name,step:String(sid)}).then(afterJ);setCur(p=>{const ph={...(p.photos||{})};ph[sid]=[...(ph[sid]||[]),rec];const ds={...(p.dates||{})};if(!ds[sid])ds[sid]=today();return{...p,photos:ph,dates:ds,date:p.date||today()};});}
   };
+  // 写真を消す＝ゴミ箱へ（あとで戻せる。削除は全端末に伝わる）
+  const trashOf=(ph,ctx)=>({...ph,...ctx,deletedAt:new Date().toISOString(),restoredAt:null,by:deviceLabel()});
+  const toTrash=(entries)=>{if(!entries.length)return;setPhotoTrash(t=>unionTrash(t,entries));setToast(entries.length>1?`${entries.length}枚をゴミ箱へ（🛟から戻せます）`:"ゴミ箱へ移しました（🛟から戻せます）");setTimeout(()=>setToast(""),2500);};
   useEffect(()=>{if(!pendingShot)return;const o=document.body.style.overflow;document.body.style.overflow="hidden";return()=>{document.body.style.overflow=o;};},[!!pendingShot]);
   const saveShot=()=>{const ps=pendingShot;if(!ps||!ps.data)return;applyShot(ps.tgt,ps.data);setPendingShot(null);setToast("保存しました");setTimeout(()=>setToast(""),1800);};
   const retakeShot=()=>{setPendingShot(null);if(fileRef.current){fileRef.current.value="";fileRef.current.click();}};
@@ -1382,7 +1702,7 @@ export default function App(){
     };
     reader.readAsDataURL(file);
   };
-  const delPhoto=(sid,idx)=>{setCur(p=>{const ph={...p.photos};const a=[...(ph[sid]||[])];a.splice(idx,1);ph[sid]=a;return{...p,photos:ph};});};
+  const delPhoto=(sid,idx)=>{const dph=((cur.photos||{})[sid]||[])[idx];if(dph)toTrash([trashOf(dph,{kind:"pt",point:cur.name,step:String(sid)})]);setCur(p=>{const ph={...p.photos};const a=[...(ph[sid]||[])];a.splice(idx,1);ph[sid]=a;return{...p,photos:ph};});};
   const totalPhotos=(pt)=>{if(!pt.photos)return 0;return Object.values(pt.photos).reduce((s,a)=>s+a.length,0);};
 
   const handlePDF=()=>{
@@ -1415,7 +1735,7 @@ export default function App(){
     const selPublic=()=>{if(workMode==="public")return;if(hasAnyData&&!window.confirm("工種を「公共工事・配水管布設」に切り替えますか？\n（撮影済みの写真・測点は消えません）"))return;setHeader(h=>({...h,projectType:"public",workKind:"",diameter:h.diameter&&Number(h.diameter)>0?Number(h.diameter):150}));if(!(checkItems||[]).some(i=>String(i).trim().startsWith("@"))&&seqTpls[0])setCheckItems(seqTpls[0].items);};
     return(<div style={{...S.w,zoom:fontScale}}>
     <div style={S.top}><h1 style={S.logo}>出来形かんたん <span style={{fontSize:10,color:"#bbb",fontWeight:500}}>v{APP_VERSION}</span></h1><div style={{display:"flex",alignItems:"center",gap:6}}><span style={S.bg}>{workMode==="simple"?"簡易":"1/3"}</span><button style={{...S.bk,fontSize:20,padding:"4px 8px"}} onClick={()=>setShowProjList(true)} title="プロジェクト一覧">≡</button></div></div>
-    {rescueBanner}
+    {rescueBanner}{restoreCenter}
     <div style={S.c}><div style={S.ch}>工事情報</div>
       {[["projectName","工事名"],["location","工事箇所"]].map(([k,l])=>(<div key={k} style={{marginBottom:8}}><label style={S.lb}>{l}</label><input style={S.inp} value={header[k]||""} onChange={e=>setHeader(h=>({...h,[k]:e.target.value}))} placeholder={l}/></div>))}</div>
     <div style={S.c}><div style={S.ch}>工種を選ぶ</div>
@@ -1476,6 +1796,8 @@ export default function App(){
           {[["標準",1.0],["大",1.15],["特大",1.3]].map(([l,z])=>(<button key={l} onClick={()=>setZoom(z)} style={{padding:"6px 12px",borderRadius:14,border:`1.5px solid ${fontScale===z?"#1565C0":"#ccc"}`,background:fontScale===z?"#1565C0":"#fff",color:fontScale===z?"#fff":"#555",fontSize:13,fontWeight:700,cursor:"pointer"}}>{l}</button>))}
         </div>
         <button style={{...S.exp,marginBottom:10,background:"#f5f5f5",color:"#555",border:"1px solid #ddd"}} onClick={()=>{window.location.reload();}}>🔄 最新版に更新（v{APP_VERSION}）</button>
+        <button style={{...S.exp,marginBottom:10,background:"#E8F5E9",color:"#1B5E20",border:"1px solid #A5D6A7"}} onClick={openRestore}>🛟 復元・履歴（この工事）</button>
+        <div style={{fontSize:12,color:"#888",margin:"-4px 0 10px"}}>この端末の名前：{devLabel}　<button onClick={renameDevice} style={{...S.sm,fontSize:12}}>変更</button></div>
         <button style={{...S.pri,marginBottom:12}} onClick={newProject}>+ 新規プロジェクト</button>
         <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
           <button onClick={()=>{setDelMode(m=>!m);setDelSel([]);}} style={{padding:"7px 12px",borderRadius:8,border:"1px solid #ddd",background:delMode?"#FFEBEE":"#fff",color:delMode?"#C62828":"#555",fontSize:13,fontWeight:700,cursor:"pointer"}}>{delMode?"✕ まとめて削除をやめる":"🗑 まとめて削除"}</button>
@@ -1676,9 +1998,10 @@ export default function App(){
 
   // ═══ CHECK（撮影チェックリスト） ═══
   if(screen==="check"){
-    const delCheckPhoto=(item,idx)=>{setCheckPhotos(p=>{const n={...p};const a=[...(n[item]||[])];a.splice(idx,1);n[item]=a;return n;});};
+    const delCheckPhoto=(item,idx)=>{const dph=(checkPhotos[item]||[])[idx];if(dph)toTrash([trashOf(dph,{kind:"ck",item})]);setCheckPhotos(p=>{const n={...p};const a=[...(n[item]||[])];a.splice(idx,1);n[item]=a;return n;});};
     const delItem=(item)=>{
-      if((checkPhotos[item]||[]).length>0){if(!confirm(`「${item}」の写真も削除されます。削除しますか?`))return;}
+      if((checkPhotos[item]||[]).length>0){if(!confirm(`「${item}」の写真はゴミ箱へ移ります（🛟から戻せます）。項目を削除しますか?`))return;}
+      toTrash((checkPhotos[item]||[]).map(ph=>trashOf(ph,{kind:"ck",item})));
       setCheckItems(p=>p.filter(x=>x!==item));
       setCheckPhotos(p=>{const n={...p};delete n[item];return n;});
       setCheckNotes(p=>{const n={...p};delete n[item];return n;});
@@ -1686,7 +2009,7 @@ export default function App(){
     };
     const addItem=()=>{const n=newItemName.trim();if(!n||checkItems.includes(n))return;setCheckItems(p=>[...p,n]);setNewItemName("");};
     const applyTpl=(tpl)=>{setCheckItems(Array.isArray(tpl.items)?tpl.items:[]);setToast(`「${tpl.name}」を適用`);setTimeout(()=>setToast(""),2000);};
-    const resetTpl=()=>{if(!confirm("チェックリストをリセットしますか?（撮影済み写真も消えます）"))return;setCheckItems([]);setCheckPhotos({});setCheckNotes({});setCheckDims({});};
+    const resetTpl=()=>{if(!confirm("チェックリストをリセットしますか?（撮影済み写真はゴミ箱へ移ります）"))return;toTrash(Object.entries(checkPhotos||{}).flatMap(([it,a])=>(a||[]).map(ph=>trashOf(ph,{kind:"ck",item:it}))));setCheckItems([]);setCheckPhotos({});setCheckNotes({});setCheckDims({});};
     const saveTpl=async()=>{
       const name=prompt("テンプレート名を入力（全工事で使い回せます）");
       if(!name)return;
@@ -1778,9 +2101,9 @@ export default function App(){
 
   // ═══ ALBUM（着手前及び完成 写真台帳） ═══
   if(screen==="album"){
-    const delAlbumPhoto=(id)=>setAlbumPhotos(p=>p.filter(x=>x.id!==id));
+    const delAlbumPhoto=(id)=>{const dph=albumPhotos.find(x=>x.id===id);if(dph)toTrash([trashOf(dph,{kind:"al",phase:dph.phase,position:dph.position})]);setAlbumPhotos(p=>p.filter(x=>x.id!==id));};
     const addPos=()=>{const n=newPosName.trim();if(!n||albumPositions.includes(n))return;setAlbumPositions(p=>[...p,n]);setNewPosName("");};
-    const delPos=(pos)=>{if(albumPhotos.some(p=>p.position===pos)){if(!confirm(`「${pos}」の写真も削除されます。削除しますか?`))return;setAlbumPhotos(p=>p.filter(x=>x.position!==pos));}setAlbumPositions(p=>p.filter(x=>x!==pos));};
+    const delPos=(pos)=>{if(albumPhotos.some(p=>p.position===pos)){if(!confirm(`「${pos}」の写真はゴミ箱へ移ります。位置を削除しますか?`))return;toTrash(albumPhotos.filter(x=>x.position===pos).map(ph=>trashOf(ph,{kind:"al",phase:ph.phase,position:ph.position})));setAlbumPhotos(p=>p.filter(x=>x.position!==pos));}setAlbumPositions(p=>p.filter(x=>x!==pos));};
     const handleAlbumPDF=()=>{generateAlbumPDF({header,albumPhotos,albumPositions});setToast("写真台帳PDF出力");setTimeout(()=>setToast(""),3000);};
     return(<div style={{...S.w,zoom:fontScale}}>
       <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={onPhotoTaken}/>
@@ -1826,7 +2149,7 @@ export default function App(){
       <h1 style={{fontSize:16,fontWeight:700,margin:0,flex:1,textAlign:"center",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{header.projectName||"出来形管理"}</h1>
       <span style={{fontSize:12,fontWeight:600,color:syncBadge.c,background:syncBadge.bg,padding:"3px 8px",borderRadius:10,whiteSpace:"nowrap"}}>{syncBadge.t}</span>
       <button style={{...S.bk,fontSize:18,padding:"4px 8px"}} onClick={()=>setShowProjList(true)} title="プロジェクト一覧">≡</button></div>
-    {rescueBanner}
+    {rescueBanner}{restoreCenter}
     <div style={{display:"flex",gap:6,fontSize:12,color:"#888",padding:"0 4px",marginBottom:10,flexWrap:"wrap"}}>
       <span>{PL[pipeType]}</span><span>φ{dia}</span><span>{road.label}</span><span>{steps.length}工程</span></div>
     {points.length===0?(<div style={{textAlign:"center",padding:"40px 16px",color:"#888"}}>
@@ -1881,6 +2204,8 @@ export default function App(){
           {[["標準",1.0],["大",1.15],["特大",1.3]].map(([l,z])=>(<button key={l} onClick={()=>setZoom(z)} style={{padding:"6px 12px",borderRadius:14,border:`1.5px solid ${fontScale===z?"#1565C0":"#ccc"}`,background:fontScale===z?"#1565C0":"#fff",color:fontScale===z?"#fff":"#555",fontSize:13,fontWeight:700,cursor:"pointer"}}>{l}</button>))}
         </div>
         <button style={{...S.exp,marginBottom:10,background:"#f5f5f5",color:"#555",border:"1px solid #ddd"}} onClick={()=>{window.location.reload();}}>🔄 最新版に更新（v{APP_VERSION}）</button>
+        <button style={{...S.exp,marginBottom:10,background:"#E8F5E9",color:"#1B5E20",border:"1px solid #A5D6A7"}} onClick={openRestore}>🛟 復元・履歴（この工事）</button>
+        <div style={{fontSize:12,color:"#888",margin:"-4px 0 10px"}}>この端末の名前：{devLabel}　<button onClick={renameDevice} style={{...S.sm,fontSize:12}}>変更</button></div>
         <button style={{...S.pri,marginBottom:12}} onClick={newProject}>+ 新規プロジェクト</button>
         <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
           <button onClick={()=>{setDelMode(m=>!m);setDelSel([]);}} style={{padding:"7px 12px",borderRadius:8,border:"1px solid #ddd",background:delMode?"#FFEBEE":"#fff",color:delMode?"#C62828":"#555",fontSize:13,fontWeight:700,cursor:"pointer"}}>{delMode?"✕ まとめて削除をやめる":"🗑 まとめて削除"}</button>
