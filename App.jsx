@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 
 const OD_DCIP={75:93.0,100:118.0,150:169.0,200:220.0,250:271.6,300:322.8,400:425.6};
@@ -81,7 +81,7 @@ function getOD(p,d){return(p==="DCIP"?OD_DCIP:p==="HPPE"?OD_HPPE:{})[d]||0;}
 function getDias(p){return p==="DCIP"?DIAS_DCIP:p==="HPPE"?DIAS_HPPE:[];}
 function calcH0(p,D,d){const od=getOD(p,d);return p==="HPPE"?D+od+100:D+od;}
 const FM={H:{label:"深さ",minus:30,plus:30},B:{label:"幅",minus:50,plus:null},Ba:{label:"舗装幅",minus:25,plus:null},D:{label:"埋設深",minus:30,plus:30},D2:{label:"埋設深②",minus:30,plus:30},ta:{label:"舗装厚",minus:7,plus:null},t0:{label:"基礎砂",minus:30,plus:30},t1:{label:"保護砂",minus:30,plus:30},t2:{label:"発生土",minus:30,plus:30},t3:{label:"発生土",minus:30,plus:30},t4:{label:"発生土",minus:30,plus:30},t5:{label:"路盤",minus:30,plus:30},t6:{label:"路盤",minus:30,plus:30},t7:{label:"路盤",minus:30,plus:30},A:{label:"弁芯距離",minus:null,plus:25},Hs:{label:"シート",minus:30,plus:30},Dm:{label:"マーカー",minus:30,plus:30}};
-const APP_VERSION="2.1.6";
+const APP_VERSION="2.1.7";
 const PL={DCIP:"DCIP(GX)",HPPE:"HPPE",SHIKIRI:"仕切弁筐"};
 // キーワード判定（URLの ?ky=shinano でも解除。一度解除した端末は記憶）
 function kwOk(v){const t=String(v||"").trim();return t.toLowerCase()==="shinano"||t==="信濃";}
@@ -661,7 +661,11 @@ function mergeProjectData(local,cloud,base){
   const pick=(lv,cv,bv)=>same(lv,bv)?cv:lv;
   const mergeObj=(lo,co,bo)=>{lo=lo||{};co=co||{};bo=bo||{};const out={...co};new Set([...Object.keys(lo),...Object.keys(bo)]).forEach(k=>{if(!same(lo[k],bo[k])){if(lo[k]===undefined)delete out[k];else out[k]=lo[k];}});return out;};
   // 同じ写真の判定は id か URL のどちらかが一致すればOK（二重登録しない）
-  const unionPhotos=(la,ca)=>{la=Array.isArray(la)?la:[];ca=Array.isArray(ca)?ca:[];const seenId=new Set(),seenUrl=new Set();const out=[];[...ca,...la].forEach(ph=>{if(!ph)return;const id=ph.id||null;const url=(typeof ph.data==="string"&&!ph.data.startsWith("data:"))?ph.data:null;if(!id&&!ph.data)return;if((id&&seenId.has(id))||(url&&seenUrl.has(url)))return;if(!id&&!url&&out.some(x=>x&&x.data===ph.data))return;if(id)seenId.add(id);if(url)seenUrl.add(url);out.push(ph);});return out;};
+  // 同じ写真が両方にある時は、片方にしか無い「元写真(raw)・撮影情報(exif)」を引き継ぐ（元写真の送信待ちが消えないように）
+  const unionPhotos=(la,ca)=>{la=Array.isArray(la)?la:[];ca=Array.isArray(ca)?ca:[];const seenId=new Map(),seenUrl=new Map();const out=[];[...ca,...la].forEach(ph=>{if(!ph)return;const id=ph.id||null;const url=(typeof ph.data==="string"&&!ph.data.startsWith("data:"))?ph.data:null;if(!id&&!ph.data)return;
+    const hit=(id&&seenId.has(id))?seenId.get(id):(url&&seenUrl.has(url))?seenUrl.get(url):-1;
+    if(hit>=0){const k=out[hit];const fill={};if(!k.raw&&ph.raw)fill.raw=ph.raw;else if(typeof k.raw==="string"&&k.raw.startsWith("idb:")&&typeof ph.raw==="string"&&/^https?:/.test(ph.raw))fill.raw=ph.raw;if(!k.exif&&ph.exif)fill.exif=ph.exif;if(Object.keys(fill).length)out[hit]={...k,...fill};return;}
+    if(!id&&!url&&out.some(x=>x&&x.data===ph.data))return;const i=out.length;if(id)seenId.set(id,i);if(url)seenUrl.set(url,i);out.push(ph);});return out;};
   const mergePhotoMap=(lm,cm)=>{lm=lm||{};cm=cm||{};const out={...cm};Object.keys(lm).forEach(k=>{out[k]=unionPhotos(lm[k],cm[k]);});return out;};
   const mergePoint=(lp,cp,bp)=>{if(!cp)return lp;if(!lp)return cp;const bb=bp||{};return{...cp,name:pick(lp.name,cp.name,bb.name),date:pick(lp.date,cp.date,bb.date),measured:mergeObj(lp.measured,cp.measured,bb.measured),dates:mergeObj(lp.dates,cp.dates,bb.dates),photos:mergePhotoMap(lp.photos,cp.photos)};};
   const lps=l.points||[],cps=c.points||[],bps=b.points||[];
@@ -771,7 +775,7 @@ function placePhotos(data,entries){
   const D=JSON.parse(JSON.stringify(data||{}));D.points=D.points||[];D.checkPhotos=D.checkPhotos||{};D.albumPhotos=D.albumPhotos||[];D.checkItems=D.checkItems||[];D.albumPositions=(D.albumPositions&&D.albumPositions.length)?D.albumPositions:["始点","中間点","終点"];
   let added=0,newPoints=0;const skipped=[];
   (entries||[]).forEach(e=>{
-    const ph={id:e.id||hashStr(e.data),data:e.data,time:e.time||"",...(e.note?{note:e.note}:{}),...(e.restored?{restored:e.restored}:{})};
+    const ph={id:e.id||hashStr(e.data),data:e.data,time:e.time||"",...(e.note?{note:e.note}:{}),...(e.restored?{restored:e.restored}:{}),...(e.raw?{raw:e.raw}:{}),...(e.exif?{exif:e.exif}:{})};
     if(!ph.data){skipped.push(e);return;}
     if(e.kind==="ck"){if(!e.item){skipped.push(e);return;}if(!D.checkItems.includes(e.item))D.checkItems.push(e.item);const a=D.checkPhotos[e.item]=D.checkPhotos[e.item]||[];if(a.some(x=>samePhoto(x,ph)))return;a.push(ph);added++;return;}
     if(e.kind==="al"){const pos=e.position||"位置不明";if(!D.albumPositions.includes(pos))D.albumPositions.push(pos);if(D.albumPhotos.some(x=>samePhoto(x,ph)))return;D.albumPhotos.push({...ph,phase:e.phase||"pre",position:pos});added++;return;}
@@ -807,10 +811,125 @@ function additiveRestore(cur,old){
   C.photoTrash=unionTrash(C.photoTrash,O.photoTrash);
   return{data:C,addP,addPh,addV};
 }
+// ═══════════════════════════════════════
+// 変更の記録（v2.1.7）: 保存のたびに「何が・何から・何へ」を1件ずつ残す（端末＋倉庫）。1件ずつ元に戻せる
+// ═══════════════════════════════════════
+// キーの順番に左右されない比較
+function stab(v){if(typeof v==="string"&&v.length>200&&v.startsWith("data:"))return JSON.stringify("data:"+v.length+":"+v.slice(-24));if(Array.isArray(v))return"["+v.map(stab).join(",")+"]";if(v&&typeof v==="object")return"{"+Object.keys(v).filter(k=>v[k]!==undefined).sort().map(k=>JSON.stringify(k)+":"+stab(v[k])).join(",")+"}";return JSON.stringify(v===undefined?null:v);}
+const jsEq=(a,b)=>stab(a)===stab(b);
+// 端末内の未送信写真（base64）は記録に入れない
+function slimV(v){if(v===undefined)return null;if(typeof v==="string")return v.startsWith("data:")?"(未送信の写真)":v;if(Array.isArray(v))return v.map(slimV);if(v&&typeof v==="object"){const o={};Object.keys(v).forEach(k=>{if(v[k]!==undefined)o[k]=slimV(v[k]);});return o;}return v;}
+const pkeyOf=(ph)=>(ph&&typeof ph==="object")?(ph.id||ph.data||null):JSON.stringify(ph);
+const isPendRef=(v)=>typeof v==="string"&&(v.startsWith("data:")||v.startsWith("idb:"));
+// 送信待ち→URLへの置き換えは「変更」に数えない
+function photoSame(a,b){const strip=(p)=>{const o={...(p||{})};["data","raw"].forEach(k=>{if(o[k]===undefined||o[k]===null||isPendRef(o[k]))delete o[k];});return o;};const A=strip(a),B=strip(b);["data","raw"].forEach(k=>{if((A[k]===undefined)!==(B[k]===undefined)){delete A[k];delete B[k];}});return jsEq(A,B);}
+function diffData(A,B){
+  const a=A||{},b=B||{};const out=[];const add=(r)=>out.push(r);
+  const isObj=(x)=>x&&typeof x==="object"&&!Array.isArray(x);
+  ["pipeType","roadType","surfaceType"].forEach(k=>{if(!jsEq(a[k],b[k]))add({area:"type",pt:null,fld:k,kind:"set",old:slimV(a[k]),new:slimV(b[k])});});
+  const dObj=(area,pt,x,y)=>{x=isObj(x)?x:{};y=isObj(y)?y:{};new Set([...Object.keys(x),...Object.keys(y)]).forEach(k=>{if(jsEq(x[k],y[k]))return;add({area,pt,fld:k,kind:(x[k]===undefined)?"add":(y[k]===undefined)?"del":"set",old:slimV(x[k]),new:slimV(y[k])});});};
+  const dPh=(area,pt,fld,x,y)=>{x=Array.isArray(x)?x:[];y=Array.isArray(y)?y:[];const yk=new Map(y.map(p=>[pkeyOf(p),p]));const xk=new Map(x.map(p=>[pkeyOf(p),p]));
+    x.forEach(p=>{const k=pkeyOf(p);if(!yk.has(k))add({area,pt,fld,kind:"del",old:slimV(p),new:null});else if(!photoSame(p,yk.get(k)))add({area,pt,fld,kind:"set",old:slimV(p),new:slimV(yk.get(k))});});
+    y.forEach(p=>{if(!xk.has(pkeyOf(p)))add({area,pt,fld,kind:"add",old:null,new:slimV(p)});});};
+  ["header","design","checkNotes","checkDims"].forEach(k=>dObj(k,null,a[k],b[k]));
+  ["checkItems","albumPositions"].forEach(k=>{if(!jsEq(a[k],b[k]))add({area:k,pt:null,fld:null,kind:"set",old:slimV(a[k]),new:slimV(b[k])});});
+  const ca=isObj(a.checkPhotos)?a.checkPhotos:{},cb=isObj(b.checkPhotos)?b.checkPhotos:{};new Set([...Object.keys(ca),...Object.keys(cb)]).forEach(k=>dPh("checkPhotos",null,k,ca[k],cb[k]));
+  dPh("albumPhotos",null,null,a.albumPhotos,b.albumPhotos);
+  const byN=(arr)=>{const m=new Map();(Array.isArray(arr)?arr:[]).forEach(p=>{if(isObj(p)&&p.name&&!m.has(p.name))m.set(p.name,p);});return m;};
+  const pa=byN(a.points),pb=byN(b.points);
+  [...new Set([...pa.keys(),...pb.keys()])].forEach(n=>{const x=pa.get(n),y=pb.get(n);if(x===y||jsEq(x,y))return;
+    if(!x){add({area:"point",pt:n,fld:null,kind:"add",old:null,new:slimV(y)});return;}
+    if(!y){add({area:"point",pt:n,fld:null,kind:"del",old:slimV(x),new:null});return;}
+    if(!jsEq(x.date,y.date))add({area:"pt.date",pt:n,fld:null,kind:"set",old:slimV(x.date),new:slimV(y.date)});
+    dObj("pt.measured",n,x.measured,y.measured);dObj("pt.dates",n,x.dates,y.dates);
+    const xp=isObj(x.photos)?x.photos:{},yp=isObj(y.photos)?y.photos:{};new Set([...Object.keys(xp),...Object.keys(yp)]).forEach(k=>dPh("pt.photos",n,k,xp[k],yp[k]));
+    new Set([...Object.keys(x),...Object.keys(y)]).forEach(k=>{if(["name","date","measured","dates","photos"].includes(k))return;if(!jsEq(x[k],y[k]))add({area:"pt.other",pt:n,fld:k,kind:"set",old:slimV(x[k]),new:slimV(y[k])});});});
+  const known=["_meta","points","header","design","checkNotes","checkDims","checkItems","albumPositions","checkPhotos","albumPhotos","photoTrash","pipeType","roadType","surfaceType"];
+  new Set([...Object.keys(a),...Object.keys(b)]).forEach(k=>{if(known.includes(k))return;if(!jsEq(a[k],b[k]))add({area:"other",pt:null,fld:k,kind:"set",old:slimV(a[k]),new:slimV(b[k])});});
+  return out;
+}
+// 端末ごとの通し番号（記録のキー＝端末ID:番号。同じ記録が端末と倉庫の両方にあっても1件に数える）
+function nextLogSeq(){try{const n=Number(localStorage.getItem("dekigata_log_seq")||0)+1;localStorage.setItem("dekigata_log_seq",String(n));return n;}catch(e){return Date.now()*1000+Math.floor(Math.random()*1000);}}
+// 表示用：打ちかけの途中経過（1→11→115→1150 のように、10秒以内に同じ項目へ書き足しただけ）は1件にまとめる。
+// 消した・書き換えた途中の値（1150→115 など）は、戻せるように必ず別の1件で残す
+function buildChangeList(recs,showAll){
+  const valueAreas=new Set(["type","header","design","checkNotes","checkDims","pt.measured","pt.dates","pt.date","pt.other","other","checkItems","albumPositions"]);
+  const asc=[...recs].sort((x,y)=>String(x.at).localeCompare(String(y.at))||((x.seq||0)-(y.seq||0)));
+  const merged=[];
+  asc.forEach(r=>{
+    const prev=merged[merged.length-1];
+    const isEdit=(x)=>!x.via||x.via==="edit";
+    const typing=!!prev&&isEdit(prev)&&isEdit(r)&&valueAreas.has(r.area)&&prev.area===r.area&&prev.dev===r.dev&&(prev.pt||"")===(r.pt||"")&&(prev.fld||"")===(r.fld||"")
+      &&typeof prev.new==="string"&&typeof r.new==="string"&&r.new.length>prev.new.length&&r.new.startsWith(prev.new)&&jsEq(r.old,prev.new)
+      &&Date.parse(r.at)-Date.parse(prev.atLast||prev.at)<=10000;
+    if(typing){prev.new=r.new;prev.atLast=r.at;prev.keys.push(r.key);return;}
+    merged.push({...r,keys:[r.key]});});
+  // 測点名の変更（同じ保存で「消えた名前」と「増えた名前」が1つずつ）
+  const groups=new Map();merged.forEach(r=>{if(r.area==="point"){const g=`${r.dev}|${r.at}`;if(!groups.has(g))groups.set(g,[]);groups.get(g).push(r);}});
+  groups.forEach(g=>{const dels=g.filter(r=>r.kind==="del"),adds=g.filter(r=>r.kind==="add");if(dels.length===1&&adds.length===1){dels[0].renameTo=adds[0].pt;adds[0].hidden=true;}});
+  const out=merged.filter(r=>!r.hidden&&!(r.old===null&&r.new===null)&&!(jsEq(r.old,r.new)));
+  const shown=showAll?out:out.filter(r=>r.kind==="del"||r.kind==="set"||r.renameTo);
+  return shown.reverse();
+}
+// ── 倉庫（Storage）にJSONを置く：変更の記録・過去の版。倉庫は消せない設定なので、上書き・削除されない ──
+async function sbUploadJson(path,obj,keepalive){try{const body=JSON.stringify(obj);const res=await fetch(`${SB_URL}/storage/v1/object/dekigata-photos/${path}`,{method:"POST",headers:{"apikey":SB_KEY,"Authorization":`Bearer ${SB_KEY}`,"Content-Type":"application/json"},body,keepalive:!!keepalive&&body.length<60000});return res.ok;}catch(e){return false;}}
+async function sbListFolder(prefix){const out=[];for(let off=0;off<10000;off+=1000){const res=await fetch(`${SB_URL}/storage/v1/object/list/dekigata-photos`,{method:"POST",headers:sbHeaders,body:JSON.stringify({prefix,limit:1000,offset:off,sortBy:{column:"name",order:"asc"}})});if(!res.ok)throw new Error("list failed");const rows=await res.json();(rows||[]).forEach(r=>{if(r&&r.name&&r.id!==null)out.push(r);});if(!rows||rows.length<1000)break;}return out;}
+async function sbGetJson(path){const res=await fetch(`${SB_URL}/storage/v1/object/public/dekigata-photos/${path}`);if(!res.ok)throw new Error("get failed");return res.json();}
+// データベース側の記録（入っていれば使う。無ければ空）
+async function sbFetchDbChanges(pid){try{const r=await fetch(`${SB_URL}/rest/v1/dekigata_changes?id=eq.${pid}&select=cid,at,area,pt,fld,kind,old_v,new_v,by_device,app_v&order=cid.desc&limit=1000`,{headers:sbHeaders});if(!r.ok)return[];const rows=await r.json();return(Array.isArray(rows)?rows:[]).map(x=>({key:"db:"+x.cid,seq:x.cid,at:x.at,dev:x.by_device||"",v:x.app_v||"",via:"",area:x.area,pt:x.pt,fld:x.fld,kind:x.kind,old:x.old_v===undefined?null:x.old_v,new:x.new_v===undefined?null:x.new_v,src:"db"}));}catch(e){return[];}}
+// 削除した工事：データベースの仕組みがあればそれで戻す。無ければ中身を読んで「新しい工事として」戻す
+function countPhotosIn(d){d=d||{};let n=0;(d.points||[]).forEach(pt=>Object.values((pt&&pt.photos)||{}).forEach(a=>{n+=(Array.isArray(a)?a.length:0);}));Object.values(d.checkPhotos||{}).forEach(a=>{n+=(Array.isArray(a)?a.length:0);});n+=Array.isArray(d.albumPhotos)?d.albumPhotos.length:0;return n;}
+async function sbListDeleted(){
+  try{const r=await fetch(`${SB_URL}/rest/v1/rpc/dekigata_list_deleted`,{method:"POST",headers:sbHeaders,body:"{}"});if(r.ok){const rows=await r.json();if(Array.isArray(rows))return{rpc:true,rows};}}catch(e){}
+  const r2=await fetch(`${SB_URL}/rest/v1/dekigata_deleted?select=id,name,deleted_at,data&order=deleted_at.desc&limit=50`,{headers:sbHeaders});if(!r2.ok)throw new Error("deleted list failed");const rows=await r2.json();
+  return{rpc:false,rows:(Array.isArray(rows)?rows:[]).map(x=>({id:x.id,name:x.name,deleted_at:x.deleted_at,n_points:((x.data&&x.data.points)||[]).length,n_photos:countPhotosIn(x.data),data:x.data}))};}
+async function sbRestoreDeletedRpc(id){try{const r=await fetch(`${SB_URL}/rest/v1/rpc/dekigata_restore_deleted`,{method:"POST",headers:sbHeaders,body:JSON.stringify({p_id:id})});if(!r.ok)return null;return await r.json();}catch(e){return null;}}
+// ── 撮影情報（EXIF）を読む：日時・機種・位置（入っていれば） ──
+function readExif(buf){try{const v=new DataView(buf);if(v.byteLength<4||v.getUint16(0)!==0xFFD8)return null;let o=2;
+  while(o+4<=v.byteLength){const mk=v.getUint16(o);if((mk&0xFF00)!==0xFF00)break;const sz=v.getUint16(o+2);
+    if(mk===0xFFE1&&o+10<=v.byteLength&&v.getUint32(o+4)===0x45786966)return parseTiff(v,o+10);
+    if(mk===0xFFDA)break;o+=2+sz;}
+  return null;}catch(e){return null;}}
+function parseTiff(v,t){const le=v.getUint16(t)===0x4949;const u16=(p)=>v.getUint16(p,le),u32=(p)=>v.getUint32(p,le);if(u16(t+2)!==42)return null;
+  const str=(p,n)=>{let s="";for(let i=0;i<n&&p+i<v.byteLength;i++){const c=v.getUint8(p+i);if(!c)break;s+=String.fromCharCode(c);}return s.trim();};
+  const sizes={1:1,2:1,3:2,4:4,5:8,7:1,9:4,10:8};
+  const readIfd=(off)=>{const out={};if(!off||t+off+2>v.byteLength)return out;const n=u16(t+off);for(let i=0;i<n;i++){const e=t+off+2+i*12;if(e+12>v.byteLength)break;const tag=u16(e),type=u16(e+2),cnt=u32(e+4);const sz=(sizes[type]||1)*cnt;const vp=sz>4?t+u32(e+8):e+8;if(vp+Math.min(sz,8)>v.byteLength)continue;
+    if(type===2)out[tag]=str(vp,cnt);else if(type===3)out[tag]=u16(vp);else if(type===4)out[tag]=u32(vp);else if(type===5){const a=[];for(let j=0;j<cnt&&vp+j*8+8<=v.byteLength;j++){const nn=u32(vp+j*8),dd=u32(vp+j*8+4);a.push(dd?nn/dd:0);}out[tag]=cnt===1?a[0]:a;}}return out;};
+  const i0=readIfd(u32(t+4));const ex=i0[0x8769]?readIfd(i0[0x8769]):{};const gp=i0[0x8825]?readIfd(i0[0x8825]):{};
+  const r={};if(i0[0x010F])r.make=i0[0x010F];if(i0[0x0110])r.model=i0[0x0110];
+  const dt=ex[0x9003]||i0[0x0132];if(dt)r.dt=dt;if(ex[0x9011])r.tz=ex[0x9011];
+  const dms=(a)=>Array.isArray(a)&&a.length===3?a[0]+a[1]/60+a[2]/3600:null;const la=dms(gp[2]),lo=dms(gp[4]);
+  if(la!==null&&lo!==null&&(la||lo)){r.lat=Math.round((gp[1]==="S"?-la:la)*1e6)/1e6;r.lon=Math.round((gp[3]==="W"?-lo:lo)*1e6)/1e6;}
+  return Object.keys(r).length?r:null;}
+const rawTries=new Map();
+// 入力済みの「出来形」（工程番号で保存される実測値・写真）があるか → 種別を変えると工程がずれるのでロック
+function hasDekigataData(pts){return(pts||[]).some(pt=>pt&&(Object.entries(pt.measured||{}).some(([k,v])=>/^\d+_/.test(k)&&v!==undefined&&v!==null&&String(v).trim()!=="")||Object.entries(pt.photos||{}).some(([k,a])=>/^\d+$/.test(k)&&Array.isArray(a)&&a.length>0)));}
 // ── 端末の控え（IndexedDB）: 撮った写真は、クラウドに届いたと確認できるまで端末に別保存 ──
-const JDB="dekigata_journal",JSTORE="shots";let jdbP=null;const journalIds=new Set();
-function jdb(){if(!jdbP){jdbP=new Promise((res,rej)=>{try{if(typeof indexedDB==="undefined")return rej(new Error("no idb"));const r=indexedDB.open(JDB,1);r.onupgradeneeded=()=>{const db=r.result;if(!db.objectStoreNames.contains(JSTORE)){const s=db.createObjectStore(JSTORE,{keyPath:"id"});s.createIndex("projectId","projectId");}};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);}catch(e){rej(e);}}).catch(e=>{jdbP=null;throw e;});}return jdbP;}
-async function jTx(mode,fn){const db=await jdb();return new Promise((res,rej)=>{const tx=db.transaction(JSTORE,mode);const st=tx.objectStore(JSTORE);let out;try{out=fn(st);}catch(e){rej(e);return;}tx.oncomplete=()=>res(out&&out.result!==undefined?out.result:out);tx.onerror=()=>rej(tx.error);tx.onabort=()=>rej(tx.error);});}
+// v2.1.7: 同じ箱に「変更の記録(changes)」と「過去の版(snaps)」も入れる。開けない時は4秒で諦める（保存は止めない）
+const JDB="dekigata_journal",JSTORE="shots",JCHG="changes",JSNAP="snaps",JBASE="bases";let jdbP=null;const journalIds=new Set();
+function jdb(){if(!jdbP){jdbP=new Promise((res,rej)=>{try{if(typeof indexedDB==="undefined")return rej(new Error("no idb"));
+  const to=setTimeout(()=>rej(new Error("idb timeout")),4000);
+  const r=indexedDB.open(JDB,2);
+  r.onupgradeneeded=()=>{const db=r.result;
+    if(!db.objectStoreNames.contains(JSTORE)){const s=db.createObjectStore(JSTORE,{keyPath:"id"});s.createIndex("projectId","projectId");}
+    if(!db.objectStoreNames.contains(JCHG)){const s=db.createObjectStore(JCHG,{keyPath:"key"});s.createIndex("projectId","projectId");}
+    if(!db.objectStoreNames.contains(JSNAP)){const s=db.createObjectStore(JSNAP,{keyPath:"sid",autoIncrement:true});s.createIndex("projectId","projectId");}
+    if(!db.objectStoreNames.contains(JBASE))db.createObjectStore(JBASE,{keyPath:"pid"});};
+  r.onsuccess=()=>{clearTimeout(to);const db=r.result;db.onversionchange=()=>{try{db.close();}catch(e){}jdbP=null;};res(db);};
+  r.onerror=()=>{clearTimeout(to);rej(r.error);};
+}catch(e){rej(e);}}).catch(e=>{jdbP=null;throw e;});}return jdbP;}
+async function jTxS(store,mode,fn){const db=await jdb();return new Promise((res,rej)=>{const tx=db.transaction(store,mode);const st=tx.objectStore(store);let out;try{out=fn(st);}catch(e){rej(e);return;}tx.oncomplete=()=>res(out&&out.result!==undefined?out.result:out);tx.onerror=()=>rej(tx.error);tx.onabort=()=>rej(tx.error);});}
+async function jTx(mode,fn){return jTxS(JSTORE,mode,fn);}
+async function jChgPut(rows){if(!rows||!rows.length)return true;try{await jTxS(JCHG,"readwrite",st=>{rows.forEach(r=>st.put(r));return null;});return true;}catch(e){return false;}}
+async function jChgAll(pid){try{const r=await jTxS(JCHG,"readonly",st=>st.index("projectId").getAll(pid));return Array.isArray(r)?r:[];}catch(e){return[];}}
+async function jChgMarkUp(keys){try{await jTxS(JCHG,"readwrite",st=>{keys.forEach(k=>{const g=st.get(k);g.onsuccess=()=>{if(g.result)st.put({...g.result,up:1});};});return null;});return true;}catch(e){return false;}}
+async function jChgPrune(pid,keep){try{const all=await jChgAll(pid);if(all.length<=keep)return;const del=all.filter(r=>r.up).sort((a,b)=>(a.seq||0)-(b.seq||0)).slice(0,all.length-keep).map(r=>r.key);if(del.length)await jTxS(JCHG,"readwrite",st=>{del.forEach(k=>st.delete(k));return null;});}catch(e){}}
+async function jSnapPut(rec){try{await jTxS(JSNAP,"readwrite",st=>st.add(rec));return true;}catch(e){return false;}}
+async function jSnapAll(pid){try{const r=await jTxS(JSNAP,"readonly",st=>st.index("projectId").getAll(pid));return Array.isArray(r)?r:[];}catch(e){return[];}}
+// 同期の「元」（最後にクラウドと合わせた版）。未送信のまま閉じても、次に開いた時に正しく3者照合できるように残す
+async function jBasePut(pid,updatedAt,data){if(!pid||!updatedAt)return false;try{await jTxS(JBASE,"readwrite",st=>st.put({pid,updatedAt,data:data||{}}));return true;}catch(e){return false;}}
+async function jBaseGet(pid){try{const r=await jTxS(JBASE,"readonly",st=>st.get(pid));return r||null;}catch(e){return null;}}
+async function jSnapPrune(pid,keep){try{const all=await jSnapAll(pid);if(all.length<=keep)return;const del=all.sort((a,b)=>a.sid-b.sid).slice(0,all.length-keep).map(r=>r.sid);await jTxS(JSNAP,"readwrite",st=>{del.forEach(k=>st.delete(k));return null;});}catch(e){}}
 async function jPut(rec){try{await jTx("readwrite",st=>st.put(rec));if(rec&&rec.id)journalIds.add(rec.id);return true;}catch(e){return false;}}
 async function jAll(projectId){try{const r=await jTx("readonly",st=>projectId?st.index("projectId").getAll(projectId):st.getAll());const arr=Array.isArray(r)?r:[];arr.forEach(e=>{if(e&&e.id&&(e.data||e.url))journalIds.add(e.id);});return arr;}catch(e){return[];}}
 async function jPatch(id,patch){try{await jTx("readwrite",st=>{const g=st.get(id);g.onsuccess=()=>{if(g.result)st.put({...g.result,...patch});};return null;});return true;}catch(e){return false;}}
@@ -849,6 +968,10 @@ async function sbDeleteProject(id){
 }
 // Storageのキーは英数字と . _ - のみ。日本語や記号はハッシュに置換
 function countBase64(d){let n=0;const isB=(ph)=>ph&&typeof ph.data==="string"&&(ph.data.startsWith("data:")||ph.data.startsWith("idb:"));(d.points||[]).forEach(pt=>Object.values(pt.photos||{}).forEach(arr=>(arr||[]).forEach(ph=>{if(isB(ph))n++;})));(d.albumPhotos||[]).forEach(ph=>{if(isB(ph))n++;});Object.values(d.checkPhotos||{}).forEach(arr=>(arr||[]).forEach(ph=>{if(isB(ph))n++;}));return n;}
+// 元写真（黒板なし）の送信待ち。黒板入りの写真が送れていれば「未送信」表示には数えないが、同期は続ける
+function countRawPending(d){d=d||{};let n=0;const isP=(ph)=>ph&&typeof ph.raw==="string"&&ph.raw.startsWith("idb:");(d.points||[]).forEach(pt=>Object.values((pt&&pt.photos)||{}).forEach(arr=>(arr||[]).forEach(ph=>{if(isP(ph))n++;})));(d.albumPhotos||[]).forEach(ph=>{if(isP(ph))n++;});Object.values(d.checkPhotos||{}).forEach(arr=>(arr||[]).forEach(ph=>{if(isP(ph))n++;}));(d.photoTrash||[]).forEach(ph=>{if(isP(ph))n++;});return n;}
+// 全体を見るハッシュ（過去の版が「変わったか」の判定用。hashStrは先頭だけを見るので使わない）
+function fullHash(t){t=String(t||"");let h=2166136261;for(let i=0;i<t.length;i++){h^=t.charCodeAt(i);h=Math.imul(h,16777619);}return(h>>>0).toString(36)+":"+t.length;}
 function hashStr(t){t=String(t||"");const samp=t.slice(0,4000)+"|"+t.length;let h=0;for(let i=0;i<samp.length;i++){h=(h*31+samp.charCodeAt(i))|0;}return "h"+(h>>>0).toString(36);}
 function safeKey(str){const t=String(str||"");if(/^[A-Za-z0-9._-]{1,40}$/.test(t))return t;let h=0;for(let i=0;i<t.length;i++){h=(h*31+t.charCodeAt(i))|0;}return "k"+(h>>>0).toString(36);}
 async function sbUploadPhoto(path,blob){
@@ -908,6 +1031,7 @@ export default function App(){
   const[checkNotes,setCheckNotes]=useState({});
   const[unsynced,setUnsynced]=useState(0);
   const[rescueInfo,setRescueInfo]=useState("");
+  const[newVer,setNewVer]=useState(false);
   const[fontScale,setFontScale]=useState(()=>{try{const v=localStorage.getItem("dekigata_zoom");return v?Number(v):1.15;}catch(e){return 1.15;}});
   const setZoom=(z)=>{setFontScale(z);try{localStorage.setItem("dekigata_zoom",String(z));}catch(e){}};
   const[checkDims,setCheckDims]=useState({});
@@ -929,17 +1053,41 @@ export default function App(){
   const lastAppliedRef=useRef(null);
   const stateRef=useRef({});
   const normData=(d)=>{d=d||{};return stripTrashed({pipeType:d.pipeType||"DCIP",roadType:d.roadType||"shidou",surfaceType:d.surfaceType||"asphalt",header:d.header||{projectName:"",location:"",diameter:150},design:d.design||{},points:d.points||[],albumPhotos:d.albumPhotos||[],albumPositions:(d.albumPositions&&d.albumPositions.length)?d.albumPositions:["始点","中間点","終点"],checkItems:d.checkItems||[],checkPhotos:d.checkPhotos||{},checkNotes:d.checkNotes||{},checkDims:d.checkDims||{},photoTrash:Array.isArray(d.photoTrash)?d.photoTrash:[]});};
-  const applyData=(d)=>{
+  // 変更の記録: 前回記録した時点の状態（工事IDつき）からの差分を、端末の箱(IndexedDB)に1件ずつ残す
+  const logBaseRef=useRef(null);
+  const queueLog=(pid,recs,via)=>{if(!pid||!recs||!recs.length)return;const at=new Date().toISOString();const dev=deviceLabel(),did=deviceId();
+    const rows=recs.map(r=>{const seq=nextLogSeq();return{...r,key:`${did}:${seq}`,seq,projectId:pid,at,dev,did,v:APP_VERSION,via:via||"edit",up:0};});jChgPut(rows);};
+  const flushLog=()=>{const pid=currentProjIdRef.current;const cur=stateRef.current;const base=logBaseRef.current;if(!pid)return;
+    if(!base||base.pid!==pid){logBaseRef.current={pid,data:cur};return;}if(base.data===cur)return;
+    let recs=[];try{recs=diffData(base.data,cur);}catch(e){recs=[];}logBaseRef.current={pid,data:cur};if(recs.length)queueLog(pid,recs,"edit");};
+  const flushLogRef=useRef(null);flushLogRef.current=flushLog;
+  // 新しい版のアプリが出ていたら知らせる（端末に古い版が残らないように）
+  const verAtRef=useRef(0);const verCheckRef=useRef(null);
+  verCheckRef.current=async(force)=>{if(!force&&Date.now()-verAtRef.current<10*60e3)return;verAtRef.current=Date.now();
+    try{const cur=[...document.querySelectorAll("script[src]")].map(s=>s.getAttribute("src")||"").find(s=>/\/assets\/index-[^/]+\.js/.test(s));if(!cur)return;
+      const res=await fetch(`/?v=${Date.now()}`,{cache:"no-store"});if(!res.ok)return;const html=await res.text();const m=html.match(/\/assets\/index-[^"'\s>]+\.js/);if(m&&!cur.includes(m[0]))setNewVer(true);}catch(e){}};
+  // via を付けた時は「この端末の操作（復元など）」として記録する。付けない時は他端末・読み込み（記録しない）
+  const applyData=(d,via)=>{
+    flushLog();
     const n=normData(d);
+    if(via){try{const recs=diffData(stateRef.current,n);if(recs.length)queueLog(currentProjIdRef.current,recs,via);}catch(e){}}
     setPipeType(n.pipeType);setRoadType(n.roadType);setSurfaceType(n.surfaceType);
     setHeader(n.header);setDesign(n.design);setPoints(n.points);
     setAlbumPhotos(n.albumPhotos);setAlbumPositions(n.albumPositions);
     setCheckItems(n.checkItems);setCheckPhotos(n.checkPhotos);setCheckNotes(n.checkNotes);setCheckDims(n.checkDims);setPhotoTrash(n.photoTrash);
     lastAppliedRef.current=JSON.stringify(n);stateRef.current=n;
+    logBaseRef.current={pid:currentProjIdRef.current,data:n};
     return n;
   };
   const resetSync=()=>{snapRef.current={updatedAt:null,data:null};lastAppliedRef.current=null;dirtyRef.current=false;};
-  const mirrorLocal=(id,d,updatedAt,dirty)=>{setProjects(prev=>{const idx=prev.findIndex(p=>p.id===id);const rec={id,...d,updatedAt:updatedAt||new Date().toISOString(),localDirty:!!dirty};let next;if(idx<0)next=[...prev,rec];else{next=[...prev];next[idx]=rec;}writeLocalProjects(next);return next;});};
+  // 未送信（localDirty）の時は「どのクラウド版を元に書き換えたか（baseAt）」も残す → 次に開いた時、他の端末の変更を消さずに3者照合できる
+  const mirrorLocal=(id,d,updatedAt,dirty,baseAtArg)=>{const snapAt=(currentProjIdRef.current===id&&snapRef.current&&snapRef.current.updatedAt)||null;
+    setProjects(prev=>{const idx=prev.findIndex(p=>p.id===id);const old=idx>=0?prev[idx]:null;const{baseAt:_ba,...dd}=d||{};
+      const rec={id,...dd,updatedAt:updatedAt||new Date().toISOString(),localDirty:!!dirty};
+      if(dirty){const b=baseAtArg||snapAt||(old&&old.baseAt)||null;if(b)rec.baseAt=b;}
+      let next;if(idx<0)next=[...prev,rec];else{next=[...prev];next[idx]=rec;}writeLocalProjects(next);return next;});};
+  // 同期の元（クラウドの版）を決める時は必ずここを通す：その工事を開いている時だけ snapRef に入れ、端末の箱にも残す
+  const setSnap=(pid,updatedAt,data)=>{if(currentProjIdRef.current===pid)snapRef.current={updatedAt,data};if(updatedAt)jBasePut(pid,updatedAt,data);};
 
   // 起動時: Supabase優先で読み込み、オフライン時はlocalStorage
   useEffect(()=>{
@@ -997,22 +1145,27 @@ export default function App(){
     const entries=await jAll(pid);
     const now=Date.now();
     const old=entries.filter(e=>e.syncedAt&&now-e.syncedAt>14*86400e3).map(e=>e.id);if(old.length)jDel(old);
-    const pending=entries.filter(e=>!e.syncedAt);
+    // 黒板入りはクラウドで確認済み（本体を外した）＋元写真も無い（送り済み・最初から無い）控えは「済」にする
+    const fin=entries.filter(e=>!e.syncedAt&&e.url&&!e.data&&!e.plain);fin.forEach(e=>jPatch(e.id,{syncedAt:now}));const finIds=new Set(fin.map(e=>e.id));
+    const pending=entries.filter(e=>!e.syncedAt&&!finIds.has(e.id));
     pending.forEach(e=>journalPendingRef.current.add(e.id));
     if(!pending.length||currentProjIdRef.current!==pid)return;
     const byId=new Map(pending.map(e=>[e.id,e]));
     const D=JSON.parse(JSON.stringify(stateRef.current||{}));let filled=0;
-    const fill=(ph)=>{if(ph&&typeof ph.data==="string"&&ph.data.startsWith("idb:")){const e=byId.get(ph.data.slice(4));const v=e&&(e.url||e.data);if(v){filled++;return{...ph,data:v};}}return ph;};
+    const fill=(ph)=>{let out=ph;if(ph&&typeof ph.data==="string"&&ph.data.startsWith("idb:")){const e=byId.get(ph.data.slice(4));const v=e&&(e.url||e.data);if(v){filled++;out={...out,data:v};}}
+      // 元写真（黒板なし）の送信待ちの印が消えていたら付け直す
+      const e2=out&&out.id?byId.get(out.id):null;if(e2&&(e2.rawUrl||e2.plain)){const want=e2.rawUrl||("idb:"+e2.id);if(!out.raw||(typeof out.raw==="string"&&out.raw.startsWith("idb:")&&e2.rawUrl)){if(out.raw!==want){filled++;out={...out,raw:want};}}}
+      return out;};
     D.points=(D.points||[]).map(pt=>pt&&pt.photos?{...pt,photos:Object.fromEntries(Object.entries(pt.photos).map(([k,a])=>[k,(a||[]).map(fill)]))}:pt);
     D.checkPhotos=Object.fromEntries(Object.entries(D.checkPhotos||{}).map(([k,a])=>[k,(a||[]).map(fill)]));
     D.albumPhotos=(D.albumPhotos||[]).map(fill);D.photoTrash=(D.photoTrash||[]).map(fill);
     const present=new Set();const col=(ph)=>{if(ph&&ph.id)present.add(ph.id);};
     (D.points||[]).forEach(pt=>Object.values((pt&&pt.photos)||{}).forEach(a=>(a||[]).forEach(col)));Object.values(D.checkPhotos||{}).forEach(a=>(a||[]).forEach(col));(D.albumPhotos||[]).forEach(col);(D.photoTrash||[]).forEach(col);
-    const missing=pending.filter(e=>!present.has(e.id)&&(e.url||e.data)).map(e=>({...e,data:e.url||e.data}));
+    const missing=pending.filter(e=>!present.has(e.id)&&(e.url||e.data)).map(e=>({...e,data:e.url||e.data,raw:e.rawUrl||(e.plain?"idb:"+e.id:undefined)}));
     const r=placePhotos(D,missing);
     if(!filled&&!r.added)return;
     if(currentProjIdRef.current!==pid)return;
-    const n=applyData(r.data);
+    const n=applyData(r.data,"journal");
     dirtyRef.current=true;mirrorLocal(pid,n,null,true);
     if(r.added)setRescueInfo(`この端末の控えから写真 ${r.added}枚 を元の場所に戻しました（自動でクラウドに保存します）`);
     setTimeout(()=>{if(syncSaveRef.current)syncSaveRef.current();},300);
@@ -1024,14 +1177,21 @@ export default function App(){
     if(pj){
       const{localDirty,...rest}=pj;const d=projToData(rest);
       const n=applyData(d);
-      if(localDirty){snapRef.current={updatedAt:null,data:null};dirtyRef.current=true;setTimeout(()=>{if(syncSaveRef.current)syncSaveRef.current();},1500);}
-      else{snapRef.current={updatedAt:pj.updatedAt||null,data:n};dirtyRef.current=false;}
+      if(localDirty){
+        // 未送信のまま閉じた工事：元にしたクラウドの版（baseAt）が分かれば、それを元に3者照合して保存する（他の端末の変更を消さない）
+        const bAt=pj.baseAt||null;const pid0=currentProjId;
+        snapRef.current={updatedAt:bAt,data:null};dirtyRef.current=true;
+        if(bAt)jBaseGet(pid0).then(b=>{if(b&&b.updatedAt===bAt&&currentProjIdRef.current===pid0&&snapRef.current.updatedAt===bAt&&!snapRef.current.data)snapRef.current={updatedAt:bAt,data:b.data||{}};});
+        setTimeout(()=>{if(syncSaveRef.current)syncSaveRef.current();},1500);}
+      else{setSnap(currentProjId,pj.updatedAt||null,n);dirtyRef.current=false;}
       const nb=countBase64(n);setUnsynced(nb);
-      if(nb>0){dirtyRef.current=true;setTimeout(()=>{if(syncSaveRef.current)syncSaveRef.current();},1500);}
+      if(nb>0||countRawPending(n)>0){dirtyRef.current=true;setTimeout(()=>{if(syncSaveRef.current)syncSaveRef.current();},1500);}
       setInited(true);
       // 設定済みの工事は、いきなり入力画面から（工事情報→設計値を毎回通らない）
       setScreen(landingFor(n));
       const pid=currentProjId;setTimeout(()=>{if(hydrateRef.current)hydrateRef.current(pid);},200);
+      // 前回送り切れなかった変更の記録を倉庫へ
+      setTimeout(()=>{if(uploadLogsRef.current&&currentProjIdRef.current===pid)uploadLogsRef.current(true,false);},4000);
     }
   // eslint-disable-next-line
   },[currentProjId,loaded]);
@@ -1048,10 +1208,12 @@ export default function App(){
     try{await syncSaveCore(id);}finally{savingRef.current=false;if(rerunRef.current){rerunRef.current=false;setTimeout(()=>{if(syncSaveRef.current)syncSaveRef.current();},300);}}
   };
   // 端末内の写真（base64／控え"idb:"）を倉庫へ送る。ファイル名に測点・工程を入れる（倉庫だけでも組み直せる）
-  const flushBase64=async(id,local)=>{
+  // mode: "photos"=黒板入りの写真だけ（保存の前） / "raw"=元写真だけ（保存が済んでから、別に送る）
+  const flushBase64=async(id,local,mode)=>{
+    const doRaw=mode==="raw";
     let changed=false;let remain=0;const repl=new Map();
     const up=async(dataUrl,fname)=>{try{const blob=await(await fetch(dataUrl)).blob();return await sbUploadPhoto(`${id}/${fname}`,blob);}catch(e){return null;}};
-    let jmap=null;const jget=async(jid)=>{if(!jmap){jmap=new Map((await jAll(id)).map(e=>[e.id,e]));}return jmap.get(jid);};
+    let jmap=null,jok=true;const jget=async(jid)=>{if(!jmap){try{const arr=await jTx("readonly",st=>st.index("projectId").getAll(id));jmap=new Map((Array.isArray(arr)?arr:[]).map(e=>[e.id,e]));}catch(e){jok=false;jmap=new Map();}}return jmap.get(jid);};
     const send=async(ph,ctx)=>{
       if(!ph||typeof ph.data!=="string")return;
       const key=ph.data;
@@ -1061,46 +1223,81 @@ export default function App(){
         remain++;return;}
       if(!key.startsWith("data:"))return;
       if(!ph.id)ph.id=hashStr(key);
+      {const e=await jget(ph.id);if(e&&e.url){ph.data=e.url;repl.set(key,e.url);changed=true;return;}} // 送り済み（URLが控えにある）なら送り直さない
       const u=await up(key,photoFileName(ctx));
       if(u){ph.data=u;repl.set(key,u);changed=true;jPatch(ph.id,{url:u});}else remain++;
     };
+    if(!doRaw){
     for(const pt of (local.points||[])){for(const k of Object.keys(pt.photos||{})){for(const ph of (pt.photos[k]||[]))await send(ph,{kind:"pt",point:pt.name,step:k});}}
     for(const ph of (local.albumPhotos||[]))await send(ph,{kind:"al",phase:ph.phase,position:ph.position});
     for(const k of Object.keys(local.checkPhotos||{})){for(const ph of (local.checkPhotos[k]||[]))await send(ph,{kind:"ck",item:k});}
     for(const t of (local.photoTrash||[]))await send(t,t.kind==="ck"?{kind:"ck",item:t.item}:t.kind==="al"?{kind:"al",phase:t.phase,position:t.position}:{kind:"pt",point:t.point,step:t.step});
-    return{changed,remain,repl};
+    }
+    // 元写真（黒板なし）は、黒板入りの写真の保存が済んでから別に送る（電波が弱い時も、大事な方の保存を待たせない）
+    const rawRepl=new Map();let rawRemain=0;
+    if(doRaw){
+    const sendRaw=async(ph)=>{
+      if(!ph||typeof ph.raw!=="string"||!ph.raw.startsWith("idb:"))return;
+      const u=photoUrlOf(ph);if(!u){rawRemain++;return;}
+      const e=await jget(ph.raw.slice(4));
+      if(e&&e.rawUrl){ph.raw=e.rawUrl;rawRepl.set(ph.id,e.rawUrl);changed=true;return;}
+      if(e&&typeof e.plain==="string"&&e.plain.startsWith("data:")){const base=u.split("/").pop().split("?")[0].replace(/\.jpg$/i,"");const r=await up(e.plain,`raw/${base}.${Math.random().toString(36).slice(2,6)}.jpg`);
+        if(r){ph.raw=r;rawRepl.set(ph.id,r);changed=true;jPatch(e.id,{rawUrl:r,plain:null});}else rawRemain++;return;}
+      // 控えは読めたのに元写真が無い → 待つのをやめる（黒板入りの写真は無事）。控え自体が3回読めない時も同じ
+      if(!jok){const n=(rawTries.get(ph.id)||0)+1;rawTries.set(ph.id,n);if(n<3){rawRemain++;return;}}
+      delete ph.raw;rawRepl.set(ph.id,null);changed=true;};
+    for(const pt of (local.points||[])){for(const k of Object.keys(pt.photos||{})){for(const ph of (pt.photos[k]||[]))await sendRaw(ph);}}
+    for(const ph of (local.albumPhotos||[]))await sendRaw(ph);
+    for(const k of Object.keys(local.checkPhotos||{})){for(const ph of (local.checkPhotos[k]||[]))await sendRaw(ph);}
+    for(const t of (local.photoTrash||[]))await sendRaw(t);
+    }
+    return{changed,remain,repl,rawRepl,rawRemain};
   };
   // URLへの置き換えを「今の状態」にだけ当てる（保存中に撮った写真・入力を上書きで消さない）
-  const replPhotos=(arr,repl)=>{if(!Array.isArray(arr))return arr;let ch=false;const out=arr.map(x=>{if(x&&typeof x.data==="string"&&repl.has(x.data)){ch=true;return{...x,data:repl.get(x.data)};}return x;});return ch?out:arr;};
-  const replPhotoMap=(m,repl)=>{if(!m)return m;let ch=false;const out={};Object.keys(m).forEach(k=>{const a=replPhotos(m[k],repl);if(a!==m[k])ch=true;out[k]=a;});return ch?out:m;};
-  const replPoints=(pts,repl)=>{if(!Array.isArray(pts))return pts;let ch=false;const out=pts.map(pt=>{if(!pt||!pt.photos)return pt;const ph=replPhotoMap(pt.photos,repl);if(ph===pt.photos)return pt;ch=true;return{...pt,photos:ph};});return ch?out:pts;};
-  const replData=(d,repl)=>({...d,points:replPoints(d.points,repl),checkPhotos:replPhotoMap(d.checkPhotos,repl),albumPhotos:replPhotos(d.albumPhotos,repl),photoTrash:replPhotos(d.photoTrash,repl)});
-  const applyRepl=(repl)=>{if(!repl||!repl.size)return;
-    setPoints(p=>replPoints(p,repl));setCheckPhotos(m=>replPhotoMap(m,repl));setAlbumPhotos(a=>replPhotos(a,repl));setPhotoTrash(t=>replPhotos(t,repl));
-    setCur(p=>{if(!p||!p.photos)return p;const ph=replPhotoMap(p.photos,repl);return ph===p.photos?p:{...p,photos:ph};});};
-  // クラウドへ送る中身: 倉庫にまだ無い写真（base64・控え）は入れない（DBが重くならない。次の送信で入る）
-  const forCloud=(d)=>{const ok=(ph)=>!(ph&&typeof ph.data==="string"&&(ph.data.startsWith("data:")||ph.data.startsWith("idb:")));const keep=(a)=>Array.isArray(a)?a.filter(ok):a;
+  const fixPh=(x,repl,rawRepl)=>{let y=x;if(y&&typeof y.data==="string"&&repl&&repl.has(y.data))y={...y,data:repl.get(y.data)};
+    if(y&&y.id&&rawRepl&&rawRepl.has(y.id)&&typeof y.raw==="string"&&y.raw.startsWith("idb:")){const r=rawRepl.get(y.id);y={...y};if(r)y.raw=r;else delete y.raw;}return y;};
+  const replPhotos=(arr,repl,rawRepl)=>{if(!Array.isArray(arr))return arr;let ch=false;const out=arr.map(x=>{const y=fixPh(x,repl,rawRepl);if(y!==x)ch=true;return y;});return ch?out:arr;};
+  const replPhotoMap=(m,repl,rawRepl)=>{if(!m)return m;let ch=false;const out={};Object.keys(m).forEach(k=>{const a=replPhotos(m[k],repl,rawRepl);if(a!==m[k])ch=true;out[k]=a;});return ch?out:m;};
+  const replPoints=(pts,repl,rawRepl)=>{if(!Array.isArray(pts))return pts;let ch=false;const out=pts.map(pt=>{if(!pt||!pt.photos)return pt;const ph=replPhotoMap(pt.photos,repl,rawRepl);if(ph===pt.photos)return pt;ch=true;return{...pt,photos:ph};});return ch?out:pts;};
+  const replData=(d,repl,rawRepl)=>({...d,points:replPoints(d.points,repl,rawRepl),checkPhotos:replPhotoMap(d.checkPhotos,repl,rawRepl),albumPhotos:replPhotos(d.albumPhotos,repl,rawRepl),photoTrash:replPhotos(d.photoTrash,repl,rawRepl)});
+  const applyRepl=(repl,rawRepl)=>{if((!repl||!repl.size)&&(!rawRepl||!rawRepl.size))return;
+    setPoints(p=>replPoints(p,repl,rawRepl));setCheckPhotos(m=>replPhotoMap(m,repl,rawRepl));setAlbumPhotos(a=>replPhotos(a,repl,rawRepl));setPhotoTrash(t=>replPhotos(t,repl,rawRepl));
+    setCur(p=>{if(!p||!p.photos)return p;const ph=replPhotoMap(p.photos,repl,rawRepl);return ph===p.photos?p:{...p,photos:ph};});};
+  // クラウドへ送る中身: 倉庫にまだ無い写真（base64・控え）は入れない（DBが重くならない。次の送信で入る）。元写真の送信待ちの印も入れない
+  const forCloud=(d)=>{const ok=(ph)=>!(ph&&typeof ph.data==="string"&&(ph.data.startsWith("data:")||ph.data.startsWith("idb:")));const cl=(ph)=>{if(ph&&typeof ph.raw==="string"&&ph.raw.startsWith("idb:")){const{raw,...rest}=ph;return rest;}return ph;};const keep=(a)=>Array.isArray(a)?a.filter(ok).map(cl):a;
     return{...d,points:(d.points||[]).map(pt=>pt&&pt.photos?{...pt,photos:Object.fromEntries(Object.entries(pt.photos).map(([k,a])=>[k,keep(a)]))}:pt),checkPhotos:Object.fromEntries(Object.entries(d.checkPhotos||{}).map(([k,a])=>[k,keep(a)])),albumPhotos:keep(d.albumPhotos||[]),photoTrash:keep(d.photoTrash||[])};};
   // 端末の控え: クラウドに届いた写真は、控えから写真本体を外す（2週間後に記録ごと消す）
   const journalPendingRef=useRef(new Set());
-  const markJournalSynced=(d)=>{const pend=journalPendingRef.current;if(!pend.size)return;const done=[];const chk=(ph)=>{if(ph&&ph.id&&pend.has(ph.id)&&photoUrlOf(ph))done.push(ph.id);};
+  // 黒板入りが届いたら控えの写真本体を外す。元写真（黒板なし）も届いたら「済」（2週間後に記録ごと消す）
+  // 元写真は、記録に倉庫のURLが入ったのを見てから外す（印が一時的に消えていても、まだ送っていない元写真を消さない）
+  const markJournalSynced=(d)=>{const pend=journalPendingRef.current;if(!pend.size)return;const done=[],half=[];const chk=(ph)=>{if(ph&&ph.id&&pend.has(ph.id)&&photoUrlOf(ph)){if(typeof ph.raw==="string"&&/^https?:/.test(ph.raw))done.push(ph.id);else half.push(ph.id);}};
     (d.points||[]).forEach(pt=>Object.values((pt&&pt.photos)||{}).forEach(a=>(a||[]).forEach(chk)));Object.values(d.checkPhotos||{}).forEach(a=>(a||[]).forEach(chk));(d.albumPhotos||[]).forEach(chk);(d.photoTrash||[]).forEach(chk);
-    done.forEach(id=>{pend.delete(id);jPatch(id,{syncedAt:Date.now(),data:null});});};
+    done.forEach(id=>{pend.delete(id);jPatch(id,{syncedAt:Date.now(),data:null,plain:null});});half.forEach(id=>{jPatch(id,{data:null});});};
   const syncSaveCore=async(id)=>{
+    // 途中で別の工事に切り替わったら、そのあとは「その工事の端末保存」以外にさわらない（別の工事に中身が混ざらないように）
+    const still=()=>currentProjIdRef.current===id;
     try{
+      if(!still())return;
       // 未送信(base64)写真を先にStorageへ → DBには URL だけを入れる
       const work=JSON.parse(JSON.stringify(stateRef.current));
-      const fl=await flushBase64(id,work);
+      const fl=await flushBase64(id,work,"photos");
+      if(!still())return; // 送れた写真のURLは端末の控えに残る → 次にその工事を開いた時に入る
       // 送れた写真はURLに置き換え（今の状態に当てるだけ。保存中に撮った写真は消さない）
-      let local=fl.repl.size?replData(stateRef.current,fl.repl):stateRef.current;
-      if(fl.repl.size){applyRepl(fl.repl);lastAppliedRef.current=JSON.stringify(local);}
+      const anyRepl=fl.repl.size>0||fl.rawRepl.size>0;
+      let local=anyRepl?replData(stateRef.current,fl.repl,fl.rawRepl):stateRef.current;
+      if(anyRepl){applyRepl(fl.repl,fl.rawRepl);lastAppliedRef.current=JSON.stringify(local);}
       setUnsynced(countBase64(local));
       let snap=snapRef.current;
       // 保存ガード: 測点が減った状態は絶対にクラウドへ送らない（消えた測点を戻してから送る）
       const g=guardLostPoints(local,snap.data);
-      if(g){local=g.data;applyData(local);stateRef.current=local;setRescueInfo(`消えかけた ${g.restored}測点 を元に戻しました`);}
+      if(g){local=g.data;applyData(local,"guard");stateRef.current=local;setRescueInfo(`消えかけた ${g.restored}測点 を元に戻しました`);}
       if(!snap.updatedAt&&isEmptyProject(local)){setSyncStatus("synced");return;}
-      const saved=(row,payload)=>{snapRef.current={updatedAt:row.updated_at,data:payload};const pend=countBase64(local)>0;dirtyRef.current=pend;lastAppliedRef.current=JSON.stringify(normData(local));mirrorLocal(id,local,row.updated_at,pend);markJournalSynced(payload);setSyncStatus(pend?"offline":"synced");};
+      const saved=(row,payload)=>{const cur=still();const pendPh=countBase64(local)>0;const pend=pendPh||countRawPending(local)>0;
+        if(cur){snapRef.current={updatedAt:row.updated_at,data:payload};dirtyRef.current=pend;lastAppliedRef.current=JSON.stringify(normData(local));}
+        jBasePut(id,row.updated_at,payload);
+        // 元写真（黒板なし）だけが送信待ちの時は「未送信」にしない（次に開いた時、古い版で他の端末の変更を上書きしないように）
+        mirrorLocal(id,local,row.updated_at,pendPh,row.updated_at);markJournalSynced(local);
+        if(cur){setSyncStatus(pendPh?"offline":"synced");if(afterSaveRef.current)afterSaveRef.current(id,payload);}};
       for(let attempt=0;attempt<3;attempt++){
         const name=(local.header&&local.header.projectName)||"";
         const payload=forCloud(local);
@@ -1109,20 +1306,53 @@ export default function App(){
         if(snap.updatedAt)r=await sbConditionalUpdate(id,name,payload,snap.updatedAt);
         else r=await sbInsertProject(id,name,payload);
         if(r.ok){saved(r.row,payload);return;}
-        if(r.deleted){handleRemoteDeleted();return;}
+        if(r.deleted){if(still())handleRemoteDeleted();return;}
+        if(!still())return;
         // 衝突: クラウドの最新を取ってマージ
         const cloudRow=await sbFetchProject(id);
-        if(!cloudRow){const ins=await sbInsertProject(id,name,payload);if(ins.ok){saved(ins.row,payload);return;}if(ins.deleted){handleRemoteDeleted();return;}continue;}
+        if(!still())return;
+        if(!cloudRow){const ins=await sbInsertProject(id,name,payload);if(ins.ok){saved(ins.row,payload);return;}if(ins.deleted){if(still())handleRemoteDeleted();return;}if(!still())return;continue;}
         const merged=mergeProjectData(local,cloudRow.data||{},snap.data||{});
         applyData(merged);
-        snapRef.current={updatedAt:cloudRow.updated_at,data:cloudRow.data||{}};
+        setSnap(id,cloudRow.updated_at,cloudRow.data||{});
         local=merged;snap=snapRef.current;stateRef.current=merged;
         setToast("他端末の更新と統合しました");setTimeout(()=>setToast(""),3000);
       }
-      setSyncStatus("offline");
-    }catch(e){console.warn("sync err",e);setSyncStatus("offline");}
+      if(still())setSyncStatus("offline");
+    }catch(e){console.warn("sync err",e);if(still())setSyncStatus("offline");}
   };
   const syncSaveRef=useRef(null);syncSaveRef.current=syncSave;
+
+  // ── 変更の記録を倉庫へ（3分に1回まで。画面を閉じる時は必ず。送れなかった分は端末の箱に残り、次に送る） ──
+  const logUpRef=useRef({at:0,busy:false});
+  const uploadLogs=async(force,keepalive)=>{
+    const pid=currentProjIdRef.current;if(!pid)return;const st=logUpRef.current;if(st.busy)return;if(!force&&Date.now()-st.at<180000)return;
+    st.busy=true;
+    try{const all=await jChgAll(pid);const pend=all.filter(r=>!r.up).sort((a,b)=>(a.seq||0)-(b.seq||0));
+      for(let i=0;i<pend.length;i+=150){const part=pend.slice(i,i+150);
+        const body={app:"dekigata",kind:"log",v:APP_VERSION,device:deviceLabel(),deviceId:deviceId(),projectId:pid,at:new Date().toISOString(),rows:part.map(({up,projectId,...r})=>r)};
+        const ok=await sbUploadJson(`${pid}/log/${Date.now()}_${deviceId()}_${Math.random().toString(36).slice(2,6)}.json`,body,keepalive);
+        if(!ok)break;await jChgMarkUp(part.map(r=>r.key));}
+      st.at=Date.now();jChgPrune(pid,3000);
+    }catch(e){}finally{st.busy=false;}};
+  const uploadLogsRef=useRef(null);uploadLogsRef.current=uploadLogs;
+  // ── 過去の版：この端末に10分おき（変わった時だけ・最新60件）、倉庫に3時間おき ──
+  const snapMemRef=useRef({});
+  const snapLocal=(pid,data)=>{if(!pid||!data)return;const sig=fullHash(JSON.stringify(data));const m=snapMemRef.current[pid]||{};if(m.sig===sig||(m.at&&Date.now()-m.at<600000))return;
+    snapMemRef.current[pid]={at:Date.now(),sig};jSnapPut({projectId:pid,at:new Date().toISOString(),dev:deviceLabel(),v:APP_VERSION,np:(data.points||[]).length,nph:countPhotosIn(data),data}).then(()=>jSnapPrune(pid,60));};
+  const snapCloud=async(pid,data)=>{if(!pid||!data)return;const k=`dekigata_snapc_${pid}`;let m={};try{m=JSON.parse(localStorage.getItem(k)||"{}")||{};}catch(e){}
+    const sig=fullHash(JSON.stringify(data));if(m.sig===sig||(m.at&&Date.now()-m.at<3*3600e3))return;
+    const ok=await sbUploadJson(`${pid}/snap/${Date.now()}_${deviceId()}_${b64u(deviceLabel()).slice(0,60)}.json`,{app:"dekigata",kind:"snap",v:APP_VERSION,device:deviceLabel(),deviceId:deviceId(),projectId:pid,at:new Date().toISOString(),np:(data.points||[]).length,nph:countPhotosIn(data),data},false);
+    if(ok){try{localStorage.setItem(k,JSON.stringify({at:Date.now(),sig}));}catch(e){}}};
+  // ── 元写真（黒板なし）は保存が済んでから別に送る。送れたら自動保存でクラウドにURLが入る ──
+  const rawBusyRef=useRef(false);
+  const uploadRaws=async()=>{const id=currentProjIdRef.current;if(!id||rawBusyRef.current)return;if(!countRawPending(stateRef.current))return;rawBusyRef.current=true;
+    try{const work=JSON.parse(JSON.stringify(stateRef.current));const fl=await flushBase64(id,work,"raw");
+      if(fl.rawRepl.size&&currentProjIdRef.current===id)applyRepl(null,fl.rawRepl);
+    }catch(e){}finally{rawBusyRef.current=false;}};
+  const uploadRawsRef=useRef(null);uploadRawsRef.current=uploadRaws;
+  const afterSaveRef=useRef(null);
+  afterSaveRef.current=(pid,payload)=>{snapLocal(pid,payload);snapCloud(pid,payload).catch(()=>{});uploadLogs(false,false);setTimeout(()=>{if(uploadRawsRef.current)uploadRawsRef.current();},300);};
 
   // 自動保存: 状態変化 → ローカル即時 + 2秒後にクラウド（条件付き）
   useEffect(()=>{
@@ -1132,7 +1362,7 @@ export default function App(){
     mirrorLocal(currentProjId,stateRef.current,null,true);
     setSyncStatus("syncing");
     if(syncTimer.current)clearTimeout(syncTimer.current);
-    syncTimer.current=setTimeout(()=>{if(syncSaveRef.current)syncSaveRef.current();},2000);
+    syncTimer.current=setTimeout(()=>{flushLog();try{snapLocal(currentProjIdRef.current,forCloud(stateRef.current));}catch(e){}if(syncSaveRef.current)syncSaveRef.current();},2000);
   // eslint-disable-next-line
   },[header,design,points,albumPhotos,albumPositions,checkItems,checkPhotos,checkNotes,checkDims,photoTrash,pipeType,roadType,surfaceType,loaded,inited,currentProjId]);
 
@@ -1140,11 +1370,14 @@ export default function App(){
   const refreshRef=useRef(null);
   refreshRef.current=async()=>{
     if(!loaded||!currentProjId||screen==="entry")return;
+    const pid=currentProjId;const still=()=>currentProjIdRef.current===pid;
     try{
-      const row=await sbFetchProject(currentProjId);
+      const row=await sbFetchProject(pid);
+      if(!still())return; // 読んでいる間に別の工事に切り替わった → 何もしない
       if(!row){
         let del=new Set();try{del=await sbFetchDeleted();}catch(e){}
-        if(del.has(currentProjId)){handleRemoteDeleted();return;}
+        if(!still())return;
+        if(del.has(pid)){handleRemoteDeleted();return;}
         if(dirtyRef.current&&syncSaveRef.current)syncSaveRef.current();
         return;
       }
@@ -1152,22 +1385,22 @@ export default function App(){
       if(dirtyRef.current){
         const merged=mergeProjectData(stateRef.current,row.data||{},snapRef.current.data||{});
         applyData(merged);
-        snapRef.current={updatedAt:row.updated_at,data:row.data||{}};
+        setSnap(pid,row.updated_at,row.data||{});
         if(syncSaveRef.current)syncSaveRef.current();
       }else{
         // 他の端末の版で測点が消えていたら、取り込まずにこの端末のデータで戻す
         const rs=rescueMerge(stateRef.current,row.data||{});
         if(rs){
-          applyData(rs.data);
-          snapRef.current={updatedAt:row.updated_at,data:row.data||{}};
-          dirtyRef.current=true;mirrorLocal(currentProjId,rs.data,row.updated_at,true);
+          applyData(rs.data,"rescue");
+          setSnap(pid,row.updated_at,row.data||{});
+          dirtyRef.current=true;mirrorLocal(pid,rs.data,row.updated_at,true);
           setRescueInfo(`他の端末で消えた ${rs.restored}測点 を、この端末のデータから戻しました`);
           if(syncSaveRef.current)syncSaveRef.current();
           return;
         }
         applyData(row.data||{});
-        snapRef.current={updatedAt:row.updated_at,data:row.data||{}};
-        mirrorLocal(currentProjId,row.data||{},row.updated_at,false);
+        setSnap(pid,row.updated_at,row.data||{});
+        mirrorLocal(pid,row.data||{},row.updated_at,false);
         setSyncStatus("synced");setToast("他端末の更新を取り込みました");setTimeout(()=>setToast(""),2500);
         const nb2=countBase64(row.data||{});setUnsynced(nb2);if(nb2>0){dirtyRef.current=true;setTimeout(()=>{if(syncSaveRef.current)syncSaveRef.current();},1000);}
       }
@@ -1191,17 +1424,21 @@ export default function App(){
         writeLocalProjects(out);
         return out;
       });
-      if(currentProjId&&deleted.has(currentProjId))handleRemoteDeleted();
+      if(currentProjId&&deleted.has(currentProjId)&&currentProjIdRef.current===currentProjId)handleRemoteDeleted();
     }catch(e){}
   };
   useEffect(()=>{if(showProjList){setDelMode(false);setDelSel([]);if(reconcileRef.current)reconcileRef.current();}},[showProjList]);
   useEffect(()=>{
-    const onVis=()=>{if(document.visibilityState==="visible"){if(refreshRef.current)refreshRef.current();if(reconcileRef.current)reconcileRef.current();}};
+    // 画面を離れる時は、変更の記録を必ず書き出して倉庫へ送る（送り切れなくても端末の箱に残る）
+    const onHide=()=>{try{if(flushLogRef.current)flushLogRef.current();}catch(e){}if(uploadLogsRef.current)uploadLogsRef.current(true,document.visibilityState==="hidden");};
+    const onVis=()=>{if(document.visibilityState==="visible"){if(refreshRef.current)refreshRef.current();if(reconcileRef.current)reconcileRef.current();if(verCheckRef.current)verCheckRef.current(false);}else onHide();};
     const onOnline=()=>{if(dirtyRef.current&&syncSaveRef.current)syncSaveRef.current();else if(refreshRef.current)refreshRef.current();};
-    document.addEventListener("visibilitychange",onVis);window.addEventListener("focus",onVis);window.addEventListener("online",onOnline);
-    return()=>{document.removeEventListener("visibilitychange",onVis);window.removeEventListener("focus",onVis);window.removeEventListener("online",onOnline);};
+    document.addEventListener("visibilitychange",onVis);window.addEventListener("focus",onVis);window.addEventListener("online",onOnline);window.addEventListener("pagehide",onHide);
+    return()=>{document.removeEventListener("visibilitychange",onVis);window.removeEventListener("focus",onVis);window.removeEventListener("online",onOnline);window.removeEventListener("pagehide",onHide);};
   },[]);
   useEffect(()=>{if(screen==="list"){if(refreshRef.current)refreshRef.current();if(reconcileRef.current)reconcileRef.current();}},[screen]);
+  // 版の確認：開いて5秒後と30分ごと
+  useEffect(()=>{const t=setTimeout(()=>{if(verCheckRef.current)verCheckRef.current(true);},5000);const iv=setInterval(()=>{if(verCheckRef.current)verCheckRef.current(false);},30*60e3);return()=>{clearTimeout(t);clearInterval(iv);};},[]);
 
   // 初期プロジェクト作成 or 既存ロード
   useEffect(()=>{
@@ -1231,6 +1468,7 @@ export default function App(){
   },[screen,tplLoaded]);
 
   const newProject=()=>{
+    flushLog();
     resetSync();
     const id=genUUID();
     setCurrentProjId(id);localStorage.setItem("dekigata_currentId",id);
@@ -1241,6 +1479,7 @@ export default function App(){
     setToast("新規プロジェクト作成");setTimeout(()=>setToast(""),2000);
   };
   const switchProject=(id)=>{
+    flushLog();
     resetSync();
     setCurrentProjId(id);localStorage.setItem("dekigata_currentId",id);
     setShowProjList(false);setScreen("setup");
@@ -1248,6 +1487,7 @@ export default function App(){
   };
   const startBlankState=()=>{setHeader({projectName:"",location:"",diameter:150,projectType:""});setDesign({});setPoints([]);setAlbumPhotos([]);setAlbumPositions(["始点","中間点","終点"]);setCheckItems([]);setCheckPhotos({});setCheckNotes({});setCheckDims({});setPhotoTrash([]);setInited(false);};
   const switchAwayFrom=(removedIds)=>{
+    flushLog();
     if(syncTimer.current)clearTimeout(syncTimer.current);
     const remaining=projects.filter(p=>!removedIds.has(p.id));
     resetSync();startBlankState();
@@ -1301,7 +1541,11 @@ export default function App(){
   // 種別を変えた時は設計厚を初期値に（B・Baは残す）。測点・写真には一切さわらない（9/25 の事故の原因だった）
   const applyTypeDefaults=(p,r,sf)=>{const st=getSteps(p,r,sf,ROADS.find(x=>x.key===r).D);setDesign(d=>({...getDefaults(st),B:d.B||"",Ba:d.Ba||""}));};
   if(!inited&&loaded&&currentProjId&&!projects.find(p=>p.id===currentProjId)){applyTypeDefaults("DCIP","shidou","asphalt");setInited(true);}
-  const typeChangeOk=()=>{if(!(points||[]).some(hasPtData))return true;return window.confirm("この工事には入力済みの測点があります。\n\n変更しても測点・写真は消えません。\n各層の設計厚は新しい種別の初期値になります。\n\n変更しますか？");};
+  // 出来形の入力（工程番号で保存される実測値・写真）がある工事は種別を変えさせない（数字・写真が別の工程にずれるため）
+  const typeLocked=hasDekigataData(points);
+  const typeChangeOk=()=>{
+    if(typeLocked){window.alert("出来形の入力（実測値・出来形の写真）がある工事は、管種・道路・路面を変えられません。\n\n変えると、入力済みの数字や写真が別の工程にずれてしまうためです。\n種別が違っていた時は、新しい工事を作って入れ直してください。");return false;}
+    if(!(points||[]).some(hasPtData))return true;return window.confirm("この工事には入力済みの測点があります。\n\n変更しても測点・写真は消えません。\n各層の設計厚は新しい種別の初期値になります。\n\n変更しますか？");};
 
   const calcDesignH=(sid,measured)=>designHFor(steps.find(s=>s.id===sid),steps,design,H0,D,measured||cur.measured,surfaceType);
   const dv=(f,sid)=>{if(f==="H")return calcDesignH(sid);if(f==="B")return design.B?Number(design.B):null;if(f==="Ba")return design.Ba?Number(design.Ba):null;if(f==="D")return D;if(f==="D2")return D2;if(f==="ta")return Number(design.ta)||40;return design[f]?Number(design[f]):null;};
@@ -1314,10 +1558,11 @@ export default function App(){
   const selSurface=(k)=>{if(k===surfaceType)return;if(!typeChangeOk())return;setSurfaceType(k);applyTypeDefaults(pipeType,roadType,k);};
   const bulkCreate=()=>{const pts=[];for(let i=0;i<bulkCount;i++)pts.push({name:`No.${i}`,date:"",measured:{},photos:{},dates:{}});setPoints(p=>(p&&p.length)?p:pts);};
   const rescueBanner=(<>{rescueInfo?(<div onClick={()=>setRescueInfo("")} style={{background:"#E8F5E9",border:"2px solid #2E7D32",borderRadius:10,padding:"10px 12px",margin:"0 4px 10px",fontSize:14,fontWeight:700,color:"#1B5E20",cursor:"pointer"}}>✅ {rescueInfo}<div style={{fontSize:11,fontWeight:500,color:"#555",marginTop:2}}>（タップで閉じる）</div></div>):null}
-    {storageWarn&&<div style={{background:"#FFEBEE",border:"1.5px solid #C62828",borderRadius:10,padding:"8px 12px",margin:"0 4px 10px",fontSize:13,fontWeight:700,color:"#B71C1C"}}>⚠ この端末の保存領域がいっぱいです。撮った写真は端末の控えに保存済み。電波のある所で開いて同期してください</div>}</>);
+    {storageWarn&&<div style={{background:"#FFEBEE",border:"1.5px solid #C62828",borderRadius:10,padding:"8px 12px",margin:"0 4px 10px",fontSize:13,fontWeight:700,color:"#B71C1C"}}>⚠ この端末の保存領域がいっぱいです。撮った写真は端末の控えに保存済み。電波のある所で開いて同期してください</div>}
+    {newVer&&<div onClick={()=>{try{flushLog();}catch(e){}window.location.reload();}} style={{background:"#FFF3E0",border:"2px solid #E65100",borderRadius:10,padding:"10px 12px",margin:"0 4px 10px",fontSize:14,fontWeight:700,color:"#BF360C",cursor:"pointer"}}>🔄 アプリの新しい版があります（今 v{APP_VERSION}）。ここを押すと更新します<div style={{fontSize:11,fontWeight:500,color:"#555",marginTop:2}}>入力・写真は消えません</div></div>}</>);
 
   // ═══ 🛟 復元センター ═══
-  const commitData=(d,msg)=>{const n=applyData(d);dirtyRef.current=true;mirrorLocal(currentProjId,n,null,true);if(msg)setRescueInfo(msg);setTimeout(()=>{if(syncSaveRef.current)syncSaveRef.current();},300);};
+  const commitData=(d,msg)=>{const n=applyData(d,"restore");dirtyRef.current=true;mirrorLocal(currentProjId,n,null,true);if(msg)setRescueInfo(msg);setTimeout(()=>{if(syncSaveRef.current)syncSaveRef.current();},300);};
   const stepLabel=(sid)=>{const s=mergedSteps.find(x=>String(x.id)===String(sid))||steps.find(x=>String(x.id)===String(sid));return s?(s.photoOnly?s.name:`${s.id}.${s.name}`):`工程${sid}`;};
   const whereLabel=(o)=>o.kind==="ck"?`チェック「${o.item||"?"}」`:o.kind==="al"?`台帳 ${o.phase==="comp"?"完成":"着手前"}・${o.position||"位置不明"}`:`${o.point||"?"}・${stepLabel(o.step)}`;
   const openRestore=()=>{setShowProjList(false);setRc({});setRestoreOpen(true);};
@@ -1325,19 +1570,25 @@ export default function App(){
     const pid=currentProjId;if(!pid)return;
     setRc(r=>({...r,scanLoading:true,scanErr:null}));
     try{
-      const files=await sbListPhotos(pid);
+      // 削除から「新しい工事として」戻した工事は、元の工事の写真の場所も調べる
+      const origin=((stateRef.current&&stateRef.current.header)||{}).originId;
+      const files=(await sbListPhotos(pid)).map(f=>({...f,_pfx:pid}));
+      if(origin&&origin!==pid){try{(await sbListPhotos(origin)).forEach(f=>files.push({...f,_pfx:origin}));}catch(e){}}
       const d=stateRef.current;const linked=new Set();const col=(ph)=>{const u=photoUrlOf(ph);if(u)linked.add(u);};
       (d.points||[]).forEach(pt=>Object.values((pt&&pt.photos)||{}).forEach(a=>(a||[]).forEach(col)));Object.values(d.checkPhotos||{}).forEach(a=>(a||[]).forEach(col));(d.albumPhotos||[]).forEach(col);(d.photoTrash||[]).forEach(col);
       const known={points:(d.points||[]).map(p=>p&&p.name).filter(Boolean),steps:[...new Set([...mergedSteps,...steps].map(s=>String(s.id)))],items:d.checkItems||[]};
-      const urlOf=(name)=>`${SB_URL}/storage/v1/object/public/dekigata-photos/${pid}/${name}`;
+      const urlOf=(f)=>`${SB_URL}/storage/v1/object/public/dekigata-photos/${f._pfx}/${f.name}`;
       const place=(p)=>p.kind==="ck"?`ck|${p.item}`:p.kind==="al"?`al|${p.phase}|${p.position||""}`:`pt|${p.point}|${p.step}`;
-      const parsed=files.map(f=>({name:f.name,url:urlOf(f.name),size:(f.metadata&&f.metadata.size)||0,p:parsePhotoName(f.name,known)}));
+      const parsed=files.map(f=>({name:f.name,url:urlOf(f),size:(f.metadata&&f.metadata.size)||0,p:parsePhotoName(f.name,known)}));
       const seen=new Set();parsed.filter(x=>linked.has(x.url)&&x.p).forEach(x=>{if(x.size)seen.add(place(x.p)+"|"+x.size);});
       const orphans=[],dups=[],unknown=[];
       parsed.filter(x=>!linked.has(x.url)).sort((a,b)=>((a.p&&a.p.ts)||0)-((b.p&&b.p.ts)||0)).forEach(x=>{
         const p=x.p;if(!p||(p.kind==="pt"&&(!p.point||!p.step))||(p.kind==="ck"&&!p.item)){unknown.push(x);return;}
         const k=place(p)+"|"+x.size;if(x.size&&seen.has(k)){dups.push(x);return;}seen.add(k);orphans.push(x);});
-      setRc(r=>({...r,scanLoading:false,scanned:true,total:files.length,orphans,dups,unknown,sel:Object.fromEntries(orphans.map(o=>[o.url,true]))}));
+      // 初めからチェックを入れるのは「今その場所に写真が無い」所の、いちばん新しい1枚だけ（テスト写真などを誤って取り込まない）
+      const slotHas=(p)=>{if(p.kind==="ck")return((d.checkPhotos||{})[p.item]||[]).length>0;if(p.kind==="al")return(d.albumPhotos||[]).some(x=>x&&(x.phase||"pre")===(p.phase||"pre")&&(x.position||"")===(p.position||""));const pt=(d.points||[]).find(q=>q&&q.name===p.point);return !!pt&&((pt.photos||{})[String(p.step)]||[]).length>0;};
+      const latest=new Map();orphans.forEach(o=>{const k=place(o.p);const pv=latest.get(k);if(!pv||((o.p.ts||0)>(pv.p.ts||0)))latest.set(k,o);});
+      setRc(r=>({...r,scanLoading:false,scanned:true,total:files.length,orphans,dups,unknown,sel:Object.fromEntries(orphans.map(o=>[o.url,!slotHas(o.p)&&latest.get(place(o.p))===o]))}));
     }catch(e){setRc(r=>({...r,scanLoading:false,scanErr:"倉庫を読めませんでした（電波を確認してもう一度）"}));}
   };
   const rcImportOrphans=()=>{
@@ -1348,22 +1599,135 @@ export default function App(){
     commitData(r.data,`倉庫の写真 ${r.added}枚 を元の測点・工程に戻しました${r.newPoints?`（測点${r.newPoints}つ追加）`:""}`);
     setRc(r0=>({...r0,orphans:(r0.orphans||[]).filter(o=>!(r0.sel&&r0.sel[o.url])),sel:{}}));
   };
-  const rcLoadHistory=async()=>{setRc(r=>({...r,histLoading:true,histErr:null}));try{const rows=await sbFetchHistory(currentProjId);setRc(r=>({...r,histLoading:false,history:rows||[]}));}catch(e){setRc(r=>({...r,histLoading:false,histErr:"履歴を読めませんでした（電波を確認）"}));}};
-  const rcRestoreVersion=async(row)=>{
-    try{const old=await sbFetchHistoryData(row.hid);if(!old)return;
-      const r=additiveRestore(stateRef.current,old);
-      if(!r.addP&&!r.addPh&&!r.addV){setToast("この版から戻せる分はありませんでした（今の方がそろっています）");setTimeout(()=>setToast(""),3000);return;}
-      if(!window.confirm(`${fmtJst(row.archived_at)} の版から\n測点 ${r.addP}・写真 ${r.addPh}枚・入力値 ${r.addV}件 を足します。\n（今の入力は上書きしません）`))return;
-      commitData(r.data,`${fmtJst(row.archived_at)} の版から 測点${r.addP}・写真${r.addPh}枚・入力値${r.addV}件 を戻しました`);
-    }catch(e){setToast("履歴を読めませんでした");setTimeout(()=>setToast(""),2500);}
+  // ── ② 過去の版（クラウドの履歴・倉庫の控え・この端末の控え）をまとめて新しい順に ──
+  const rcLoadHistory=async()=>{const pid=currentProjId;setRc(r=>({...r,histLoading:true,histErr:null}));
+    const out=[];let err=null;
+    try{const rows=await sbFetchHistory(pid);(rows||[]).forEach(h=>out.push({key:"h"+h.hid,src:"cloud",at:h.archived_at,h}));}catch(e){err="クラウドの履歴を読めませんでした（電波を確認）";}
+    try{const files=await sbListFolder(`${pid}/snap`);files.forEach(f=>{const m=String(f.name).match(/^(\d{13})_([^_]+)_?([^.]*)\.json$/);const dev=m&&m[3]?(unb64u(m[3])||""):"";out.push({key:"s"+f.name,src:"storage",at:m?new Date(Number(m[1])).toISOString():(f.created_at||""),path:`${pid}/snap/${f.name}`,dev});});}catch(e){}
+    try{(await jSnapAll(pid)).forEach(s=>out.push({key:"l"+s.sid,src:"device",at:s.at,dev:s.dev,np:s.np,nph:s.nph,data:s.data}));}catch(e){}
+    out.sort((a,b)=>String(b.at).localeCompare(String(a.at)));
+    setRc(r=>({...r,histLoading:false,histErr:out.length?null:err,history:out,histN:40}));};
+  const rcRestoreVersion=async(v)=>{
+    let old=null,label="";
+    try{if(v.src==="cloud"){old=await sbFetchHistoryData(v.h.hid);label=`${fmtJst(v.at)} の版`;}
+      else if(v.src==="storage"){const j=await sbGetJson(v.path);old=j&&j.data;label=`${fmtJst(v.at)} の版（倉庫）`;}
+      else{old=v.data;label=`${fmtJst(v.at)} の版（この端末）`;}}catch(e){}
+    if(!old){setToast("この版を読めませんでした");setTimeout(()=>setToast(""),2500);return;}
+    const r=additiveRestore(stateRef.current,old);
+    if(!r.addP&&!r.addPh&&!r.addV){setToast("この版から戻せる分はありませんでした（今の方がそろっています）");setTimeout(()=>setToast(""),3000);return;}
+    if(!window.confirm(`${label}から\n測点 ${r.addP}・写真 ${r.addPh}枚・入力値 ${r.addV}件 を足します。\n（今の入力は上書きしません）`))return;
+    commitData(r.data,`${label}から 測点${r.addP}・写真${r.addPh}枚・入力値${r.addV}件 を戻しました`);
   };
   const rcRestoreTrash=(t)=>{
     const now=new Date().toISOString();const d=JSON.parse(JSON.stringify(stateRef.current));
     d.photoTrash=(d.photoTrash||[]).map(x=>trashKeyOf(x)===trashKeyOf(t)?{...x,restoredAt:now}:x);
-    const r=placePhotos(d,[{kind:t.kind,point:t.point,step:t.step,item:t.item,phase:t.phase,position:t.position,data:t.data,id:t.id,time:t.time,note:t.note}]);
+    const r=placePhotos(d,[{kind:t.kind,point:t.point,step:t.step,item:t.item,phase:t.phase,position:t.position,data:t.data,id:t.id,time:t.time,note:t.note,raw:t.raw,exif:t.exif}]);
     commitData(r.data,`ゴミ箱から写真を戻しました（${whereLabel(t)}）`);
   };
-  const rcJournal=async()=>{const all=await jAll(currentProjId);setRc(r=>({...r,journal:{total:all.length,pending:all.filter(e=>!e.syncedAt).length}}));};
+  // ── ① 変更の記録（1件ずつ戻す）：この端末の箱＋倉庫（全端末ぶん）＋データベース（入っていれば） ──
+  const rcLoadChanges=async()=>{const pid=currentProjId;if(!pid)return;setRc(r=>({...r,chgLoading:true,chgErr:null}));
+    try{flushLog();await new Promise(res=>setTimeout(res,200));
+      const local=(await jChgAll(pid)).map(r=>({...r,src:"device"}));
+      const cloud=[];let cloudErr=false;
+      try{const files=await sbListFolder(`${pid}/log`);const names=files.map(f=>f.name).sort().slice(-100);
+        const got=await Promise.all(names.map(n=>sbGetJson(`${pid}/log/${n}`).catch(()=>null)));
+        got.forEach(j=>{if(j&&Array.isArray(j.rows))j.rows.forEach(r=>{if(r&&r.key)cloud.push({...r,src:"storage",dev:r.dev||j.device||""});});});}catch(e){cloudErr=true;}
+      const db=await sbFetchDbChanges(pid);
+      const byKey=new Map();[...cloud,...local].forEach(r=>byKey.set(r.key,r));
+      const all=[...byKey.values()];
+      if(db.length){const sig=(r)=>`${r.area}|${r.pt||""}|${r.fld||""}|${r.kind}|${stab(r.old)}|${stab(r.new)}`;const have=new Map();all.forEach(r=>{const s=sig(r);if(!have.has(s))have.set(s,[]);have.get(s).push(Date.parse(r.at));});
+        db.forEach(r=>{const ts=have.get(sig(r))||[];if(!ts.some(t=>Math.abs(t-Date.parse(r.at))<180000))all.push(r);});}
+      setRc(r=>({...r,chgLoading:false,changes:all,chgCloudErr:cloudErr,chgN:60}));
+    }catch(e){setRc(r=>({...r,chgLoading:false,chgErr:"記録を読めませんでした"}));}};
+  const typeValLabel={DCIP:"DCIP(GX)",HPPE:"HPPE",SHIKIRI:"仕切弁筐",shidou:"市道",kendou:"県道",asphalt:"アスファルト",gravel:"砕石",public:"公共工事",simple:"簡易"};
+  const fmtVal=(v,area)=>{if(v===null||v===undefined||v==="")return"（空）";if((area==="type"||area==="header")&&typeof v==="string"&&typeValLabel[v])return typeValLabel[v];
+    if(typeof v==="string")return v.length>36?v.slice(0,36)+"…":v;if(typeof v==="number"||typeof v==="boolean")return String(v);
+    if(Array.isArray(v))return`${v.length}件`;
+    if(typeof v==="object"){if(v.name&&("measured" in v||"photos" in v))return`測点 ${v.name}`;if("data" in v||"id" in v)return"写真";const s=Object.entries(v).filter(([k,x])=>x!==""&&x!==null&&x!==undefined&&typeof x!=="object").map(([k,x])=>`${k}${x}`).join(" ");return s?(s.length>36?s.slice(0,36)+"…":s):"（空）";}
+    return String(v);};
+  const fName={H:"H（深さ）",B:"B（幅）",Ba:"Ba（舗装幅）",D:"D（埋設深）",D2:"D②",ta:"ta（舗装厚）",A:"A（弁芯距離）",Hs:"Hs（シート）",Dm:"Dm（マーカー）"};
+  const hdrName={projectName:"工事名",location:"工事箇所",diameter:"口径",projectType:"工事の種類",workKind:"工種",pipe2:"2条目",originId:"元の工事"};
+  const typeName={pipeType:"管種",roadType:"道路種別",surfaceType:"路面"};
+  const measLabel=(k)=>{let m=String(k||"").match(/^(\d+)_(f_)?(.+)$/);if(m)return`${stepLabel(m[1])} ${m[2]?m[3]:(fName[m[3]]||m[3])}`;m=String(k||"").match(/^(p:.+?)_f_(.+)$/);if(m)return`${stepLabel(m[1])} ${m[2]}`;return String(k||"");};
+  const designLabel=(k)=>{if(k==="B")return"床付幅B";if(k==="Ba")return"舗装幅Ba";if(k==="ta")return"舗装厚ta";const st=steps.find(s=>s.tKey===k);return st?`${k}（${st.name}）`:String(k);};
+  const chgWhere=(r)=>{const pt=r.pt?`${r.pt}・`:"";switch(r.area){
+    case"type":return typeName[r.fld]||r.fld;case"header":return hdrName[r.fld]||r.fld;case"design":return`設計値 ${designLabel(r.fld)}`;
+    case"pt.measured":return pt+measLabel(r.fld);case"pt.dates":return`${pt}${stepLabel(r.fld)} の日付`;case"pt.date":return`${pt}測点の日付`;
+    case"pt.photos":return`${pt}${stepLabel(r.fld)} の写真`;case"pt.other":return`${pt}${r.fld}`;
+    case"point":return r.renameTo?`測点名 ${r.pt} → ${r.renameTo}`:`測点 ${r.pt}`;
+    case"checkNotes":return`「${r.fld}」のメモ`;case"checkDims":return`「${r.fld}」の寸法`;case"checkPhotos":return`「${r.fld}」の写真`;
+    case"albumPhotos":return"着手前及び完成の写真";case"checkItems":return"撮影項目の並び";case"albumPositions":return"写真台帳の位置";
+    case"project":return"削除した工事を戻した";default:return r.fld||r.area;}};
+  const isValueArea=(a)=>["type","header","design","checkNotes","checkDims","pt.measured","pt.dates","pt.date","pt.other","checkItems","albumPositions"].includes(a);
+  const curValOf=(r)=>{const d=stateRef.current||{};const pt=r.pt?(d.points||[]).find(p=>p&&p.name===r.pt):null;switch(r.area){
+    case"type":return d[r.fld];case"header":case"design":case"checkNotes":case"checkDims":return(d[r.area]||{})[r.fld];
+    case"pt.measured":return pt?(pt.measured||{})[r.fld]:undefined;case"pt.dates":return pt?(pt.dates||{})[r.fld]:undefined;case"pt.date":return pt?pt.date:undefined;case"pt.other":return pt?pt[r.fld]:undefined;
+    case"checkItems":case"albumPositions":return d[r.area];default:return undefined;}};
+  const photoPresent=(r,ph)=>{if(!ph)return false;const d=stateRef.current||{};const has=(arr)=>(arr||[]).some(x=>x&&((ph.id&&x.id===ph.id)||(photoUrlOf(ph)&&photoUrlOf(x)===photoUrlOf(ph))));
+    if(r.area==="pt.photos"){const pt=(d.points||[]).find(p=>p&&p.name===r.pt);return !!pt&&has((pt.photos||{})[r.fld]);}
+    if(r.area==="checkPhotos")return has((d.checkPhotos||{})[r.fld]);if(r.area==="albumPhotos")return has(d.albumPhotos);return false;};
+  // 記録を当てる：useNew=false なら「前の値に戻す」、true なら「この値にする」（別の端末の値を採りたい時）
+  const rcApplyChange=async(r,useNew)=>{
+    const say=(m)=>{setToast(m);setTimeout(()=>setToast(""),3000);};
+    // 出来形の入力がある工事は、種別（管種・道路・路面）を記録からも変えない（数字・写真が別の工程にずれるため）
+    if(r.area==="type"&&hasDekigataData((stateRef.current||{}).points)){say("出来形の入力があるので、管種・道路・路面は戻せません（数字や写真が別の工程にずれるため）");return;}
+    const isPh=["pt.photos","checkPhotos","albumPhotos"].includes(r.area)&&r.kind==="del";
+    // 写真の中身を先に探す（端末の控えを読む間に他の更新が入っても、その後の状態から写しを取るので消さない）
+    let ph=null;
+    if(isPh){ph=r.old&&typeof r.old==="object"?{...r.old}:null;if(!ph){say("戻せませんでした");return;}
+      if(!photoUrlOf(ph)){const tr=((stateRef.current||{}).photoTrash||[]).find(x=>x&&ph.id&&x.id===ph.id&&typeof x.data==="string"&&!x.data.startsWith("("));
+        if(tr)ph.data=tr.data;else{const all=await jAll(currentProjId);const e=all.find(x=>x.id===ph.id);if(e&&(e.url||e.data))ph.data=e.url||e.data;}}
+      if(!ph.data||String(ph.data).startsWith("(")){say("写真の中身が見つかりませんでした");return;}}
+    const target=useNew?r.new:r.old;const d=JSON.parse(JSON.stringify(stateRef.current||{}));
+    const setKey=(obj,k,v)=>{if(v===null||v===undefined)delete obj[k];else obj[k]=v;};
+    const findPt=(n)=>(d.points||[]).find(p=>p&&p.name===n);
+    let msg="";
+    if(isValueArea(r.area)){
+      const curV=curValOf(r);
+      if(!useNew&&!jsEq(curV,r.new)&&!window.confirm(`今の値（${fmtVal(curV,r.area)}）は、この記録のあとにも変わっています。\n「${fmtVal(r.old,r.area)}」に戻しますか？`))return;
+      if(r.area==="type"){if(typeof target!=="string"){say("戻せませんでした");return;}d[r.fld]=target;}
+      else if(["header","design","checkNotes","checkDims"].includes(r.area)){d[r.area]=d[r.area]||{};setKey(d[r.area],r.fld,target);}
+      else if(r.area==="checkItems"||r.area==="albumPositions"){if(!Array.isArray(target)){say("戻せませんでした");return;}if(!window.confirm(`${chgWhere(r)}を、この時の内容（${target.length}件）にしますか？`))return;d[r.area]=target;}
+      else{const p=findPt(r.pt);if(!p){say(`測点「${r.pt}」が今はありません`);return;}
+        if(r.area==="pt.measured"){p.measured=p.measured||{};setKey(p.measured,r.fld,target);}
+        else if(r.area==="pt.dates"){p.dates=p.dates||{};setKey(p.dates,r.fld,target);}
+        else if(r.area==="pt.date"){p.date=target||"";}
+        else setKey(p,r.fld,target);}
+      msg=`${chgWhere(r)} を「${fmtVal(target,r.area)}」にしました`;
+    }else if(isPh){
+      if(photoPresent(r,ph)){say("その写真は今も入っています");return;}
+      d.photoTrash=(d.photoTrash||[]).map(x=>(x&&((ph.id&&x.id===ph.id)||(photoUrlOf(x)&&photoUrlOf(x)===photoUrlOf(ph)))&&trashActive(x))?{...x,restoredAt:new Date().toISOString()}:x);
+      const e=r.area==="pt.photos"?{kind:"pt",point:r.pt,step:r.fld}:r.area==="checkPhotos"?{kind:"ck",item:r.fld}:{kind:"al",phase:ph.phase,position:ph.position};
+      const res=placePhotos(d,[{...e,data:ph.data,id:ph.id,time:ph.time,note:ph.note,raw:(typeof ph.raw==="string"&&/^https?:/.test(ph.raw))?ph.raw:undefined,exif:ph.exif}]);
+      commitData(res.data,`写真を戻しました（${chgWhere(r)}）`);return;
+    }else if(r.area==="point"&&r.kind==="del"){
+      if(r.renameTo){const p=findPt(r.renameTo);if(!p||findPt(r.pt)){say("名前を戻せませんでした（今の測点名を確認してください）");return;}if(!window.confirm(`測点名「${r.renameTo}」を「${r.pt}」に戻しますか？`))return;p.name=r.pt;msg=`測点名を「${r.pt}」に戻しました`;}
+      else{if(findPt(r.pt)){say("その測点は今もあります");return;}if(!r.old||typeof r.old!=="object"){say("戻せませんでした");return;}
+        const p=JSON.parse(JSON.stringify(r.old));Object.keys(p.photos||{}).forEach(k=>{p.photos[k]=(p.photos[k]||[]).filter(x=>x&&photoUrlOf(x));});
+        d.points=[...(d.points||[]),p];msg=`測点 ${r.pt} を戻しました`;}
+    }else return;
+    commitData(d,msg);};
+  // ── ⑦ 削除した工事 ──
+  const rcLoadDeleted=async()=>{setRc(r=>({...r,delLoading:true,delErr:null}));
+    try{const res=await sbListDeleted();const active=new Set(projects.map(p=>p.id));const from=new Set(projects.map(p=>p.header&&p.header.originId).filter(Boolean));
+      setRc(r=>({...r,delLoading:false,deleted:(res.rows||[]).filter(x=>x&&!active.has(x.id)&&!from.has(x.id)),delRpc:res.rpc}));}
+    catch(e){setRc(r=>({...r,delLoading:false,delErr:"読めませんでした（電波を確認）"}));}};
+  const rcRestoreDeleted=async(row)=>{
+    if(!window.confirm(`削除した工事「${row.name||"(名称未設定)"}」を戻しますか？`))return;
+    const say=(m)=>{setToast(m);setTimeout(()=>setToast(""),3500);};
+    const r=await sbRestoreDeletedRpc(row.id);
+    if(r&&r.ok){if(reconcileRef.current)await reconcileRef.current();setRc(x=>({...x,deleted:(x.deleted||[]).filter(y=>y.id!==row.id)}));say("戻しました（≡の一覧に出ます）");return;}
+    // データベースに戻す仕組みが無い時：中身を写して「新しい工事」として戻す（写真は元の場所のまま使える）
+    let data=row.data;
+    if(!data){try{const res=await fetch(`${SB_URL}/rest/v1/dekigata_deleted?id=eq.${row.id}&select=data`,{headers:sbHeaders});const rows=await res.json();data=rows&&rows[0]&&rows[0].data;}catch(e){}}
+    if(!data){say("中身を読めませんでした");return;}
+    const nid=genUUID();const{_meta,...rest}=data;const d={...rest,header:{...(rest.header||{}),originId:row.id}};
+    let ins=null;try{ins=await sbInsertProject(nid,row.name||(d.header&&d.header.projectName)||"",d);}catch(e){}
+    if(!ins||!ins.ok){say("戻せませんでした（電波を確認）");return;}
+    setProjects(prev=>{const next=[...prev,{id:nid,...d,updatedAt:ins.row.updated_at,localDirty:false}];writeLocalProjects(next);return next;});
+    setRc(x=>({...x,deleted:(x.deleted||[]).filter(y=>y.id!==row.id)}));
+    say("新しい工事として戻しました（≡の一覧から開けます）");};
+  const rcJournal=async()=>{const all=await jAll(currentProjId);setRc(r=>({...r,journal:{total:all.length,pending:all.filter(e=>!e.syncedAt).length,raw:all.filter(e=>e.plain).length}}));};
   const rcExport=()=>{try{const d={app:"dekigata",v:APP_VERSION,exportedAt:new Date().toISOString(),device:deviceLabel(),id:currentProjId,data:forCloud(stateRef.current)};const blob=new Blob([JSON.stringify(d)],{type:"application/json"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=`出来形_${String(header.projectName||"工事").slice(0,24)}_${today()}.json`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);setToast("バックアップを保存しました");setTimeout(()=>setToast(""),2500);}catch(e){setToast("保存できませんでした");setTimeout(()=>setToast(""),2500);}};
   const importRef=useRef(null);
   const rcImportFile=(e)=>{const f=e.target.files&&e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const j=JSON.parse(String(rd.result||""));const old=j&&j.app==="dekigata"&&j.data?j.data:null;if(!old)throw new Error("bad");
@@ -1374,22 +1738,71 @@ export default function App(){
   const reasonLabel={periodic:"定期",points_down:"測点が減る更新の前",photos_down:"写真が減る更新の前",guard:"🛡 測点の消去を防いだ"};
   const rcBox={background:"#fff",border:"1px solid #ddd",borderRadius:12,padding:12,marginBottom:12};
   const rcBtn={padding:"10px 14px",fontSize:14,fontWeight:700,borderRadius:10,border:"1.5px solid #1565C0",background:"#E3F2FD",color:"#1565C0",cursor:"pointer"};
+  const rcSmall={...rcBtn,padding:"6px 10px",fontSize:13};
+  const srcLabel={cloud:"クラウド",storage:"倉庫",device:"この端末",db:"クラウド"};
+  const changeRows=useMemo(()=>(restoreOpen&&rc.changes)?buildChangeList(rc.changes,!!rc.chgAll):[],[restoreOpen,rc.changes,rc.chgAll]);
   const restoreCenter=restoreOpen?createPortal(
     <div style={{position:"fixed",inset:0,background:"#f4f6f8",zIndex:10001,overflowY:"auto",WebkitOverflowScrolling:"touch",fontFamily:'"Helvetica Neue","Hiragino Sans",sans-serif',WebkitTextSizeAdjust:"100%"}}>
       <div style={{maxWidth:560,margin:"0 auto",padding:"12px 12px 60px"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
           <h2 style={{fontSize:19,fontWeight:800,margin:0}}>🛟 復元センター</h2>
-          <button onClick={()=>setRestoreOpen(false)} style={{...rcBtn,background:"#fff",color:"#555",border:"1px solid #ccc"}}>閉じる</button></div>
+          <button onClick={()=>{setRestoreOpen(false);setRc({});}} style={{...rcBtn,background:"#fff",color:"#555",border:"1px solid #ccc"}}>閉じる</button></div>
         <div style={{fontSize:13,fontWeight:700,color:"#333",marginBottom:4}}>{header.projectName||"(名称未設定)"}</div>
-        <div style={{fontSize:12,color:"#666",marginBottom:12,lineHeight:1.6}}>写真ファイルは倉庫から消えません。消した写真はゴミ箱へ。クラウドには上書き前の版が10分ごとに残ります。どれも「足りない分を足す」だけで、今の入力は上書きしません。</div>
+        <div style={{fontSize:12,color:"#666",marginBottom:12,lineHeight:1.6}}>入力の書き換えは1件ずつ記録しています。写真ファイルは倉庫から消えず、黒板を入れる前の元写真も残します。消した写真はゴミ箱へ。どの戻し方も、今の入力を勝手に上書きしません。</div>
         {rescueInfo&&<div style={{...rcBox,background:"#E8F5E9",border:"2px solid #2E7D32",color:"#1B5E20",fontWeight:700,fontSize:14}}>✅ {rescueInfo}</div>}
 
-        <div style={rcBox}><div style={{fontSize:15,fontWeight:800,marginBottom:6}}>① 倉庫の写真と照合</div>
+        <div style={rcBox}><div style={{fontSize:15,fontWeight:800,marginBottom:6}}>① 変更の記録（1件ずつ戻す）</div>
+          <div style={{fontSize:12,color:"#666",marginBottom:8}}>数字・設定・写真の書き換えと削除を、全部の端末ぶん新しい順に出します。間違えて書き換えた値や消した写真を、1件ずつ元に戻せます。</div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+            <button style={rcBtn} disabled={rc.chgLoading} onClick={rcLoadChanges}>{rc.chgLoading?"読み込み中…":rc.changes?"更新":"変更の記録を見る"}</button>
+            {rc.changes&&<label style={{fontSize:12,color:"#555",display:"flex",alignItems:"center",gap:4}}><input type="checkbox" checked={!!rc.chgAll} onChange={e=>{const on=e.target.checked;setRc(r=>({...r,chgAll:on}));}}/>追加したものも出す</label>}</div>
+          {rc.chgErr&&<div style={{color:"#C62828",fontSize:13,marginTop:6}}>{rc.chgErr}</div>}
+          {rc.chgCloudErr&&<div style={{color:"#E65100",fontSize:12,marginTop:6}}>倉庫の記録を読めませんでした（この端末の記録だけ出しています）</div>}
+          {rc.changes&&changeRows.length===0&&<div style={{fontSize:13,color:"#888",marginTop:8}}>{rc.chgAll?"まだ記録はありません":"書き換え・削除の記録はありません（「追加したものも出す」で全部見られます）"}</div>}
+          {changeRows.slice(0,rc.chgN||60).map(r=>{const val=isValueArea(r.area);const ph=["pt.photos","checkPhotos","albumPhotos"].includes(r.area);const cv=val?curValOf(r):undefined;
+            const atOld=val&&jsEq(cv,r.old);const atNew=val&&jsEq(cv,r.new);
+            const thumb=ph?(photoUrlOf(r.old)||photoUrlOf(r.new)):null;
+            return(<div key={r.keys.join(",")} style={{padding:"8px 0",borderBottom:"1px solid #eee"}}>
+              <div style={{fontSize:12,color:"#777"}}>{fmtJst(r.atLast||r.at)}・{r.dev||"端末不明"}{r.via&&r.via!=="edit"?`（${{restore:"復元",guard:"自動ガード",rescue:"自動救出",journal:"控えから"}[r.via]||r.via}）`:""}{r.src?`・${srcLabel[r.src]||""}`:""}</div>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                {thumb&&<img src={thumb} onClick={()=>setViewPhoto(thumb)} style={{width:56,height:42,objectFit:"cover",borderRadius:6,background:"#ddd"}}/>}
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:14,fontWeight:700}}>{chgWhere(r)}</div>
+                  {val&&<div style={{fontSize:13}}><span style={{color:"#C62828"}}>{fmtVal(r.old,r.area)}</span> → <span style={{color:"#1565C0"}}>{fmtVal(r.new,r.area)}</span>{!atNew&&!atOld?<span style={{fontSize:11,color:"#888"}}>（今は {fmtVal(cv,r.area)}）</span>:null}</div>}
+                  {!val&&<div style={{fontSize:13,color:r.kind==="del"?"#C62828":"#2E7D32"}}>{r.renameTo?"測点名の変更":r.kind==="del"?"消えた":r.kind==="add"?"追加":"変更"}</div>}
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:4,flexShrink:0}}>
+                  {val&&!atOld&&<button style={rcSmall} onClick={()=>rcApplyChange(r,false)}>前の値に戻す</button>}
+                  {val&&atOld&&!atNew&&r.new!==null&&r.new!==undefined&&r.new!==""&&<button style={rcSmall} onClick={()=>rcApplyChange(r,true)}>この値にする</button>}
+                  {ph&&r.kind==="del"&&<button style={rcSmall} onClick={()=>rcApplyChange(r,false)}>写真を戻す</button>}
+                  {r.area==="point"&&r.kind==="del"&&<button style={rcSmall} onClick={()=>rcApplyChange(r,false)}>{r.renameTo?"名前を戻す":"測点を戻す"}</button>}
+                </div></div></div>);})}
+          {changeRows.length>(rc.chgN||60)&&<button style={{...rcBtn,width:"100%",marginTop:8,background:"#fff"}} onClick={()=>setRc(r=>({...r,chgN:(r.chgN||60)+60}))}>もっと見る（あと{changeRows.length-(rc.chgN||60)}件）</button>}
+        </div>
+
+        <div style={rcBox}><div style={{fontSize:15,fontWeight:800,marginBottom:6}}>② 過去の版（まるごとの控え）</div>
+          <div style={{fontSize:12,color:"#666",marginBottom:8}}>クラウドの履歴（10分おき・消える前は必ず）と、倉庫・この端末に残した控えです。選んだ版から、今足りない測点・写真・入力値だけを足します。</div>
+          <button style={rcBtn} disabled={rc.histLoading} onClick={rcLoadHistory}>{rc.histLoading?"読み込み中…":rc.history?"更新":"履歴を見る"}</button>
+          {rc.histErr&&<div style={{color:"#C62828",fontSize:13,marginTop:6}}>{rc.histErr}</div>}
+          {rc.history&&rc.history.length===0&&<div style={{fontSize:13,color:"#888",marginTop:8}}>まだ履歴はありません（保存のたびに残っていきます）</div>}
+          {(rc.history||[]).slice(0,rc.histN||40).map(v=>(<div key={v.key} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid #eee"}}>
+            <div style={{flex:1,minWidth:0}}>
+              {v.src==="cloud"?(<><div style={{fontSize:14,fontWeight:700}}>{fmtJst(v.at)} <span style={{fontSize:12,fontWeight:600,color:v.h.reason==="guard"?"#C62828":"#666"}}>{reasonLabel[v.h.reason]||v.h.reason}</span></div>
+                <div style={{fontSize:12,color:"#666"}}>クラウド・測点{v.h.n_points}・写真{v.h.n_photos}枚{v.h.new_n_points!==null&&v.h.new_n_points!==undefined?` → 上書き後 測点${v.h.new_n_points}・写真${v.h.new_n_photos}枚`:""}{v.h.by_device?`（${v.h.by_device}）`:v.h.by_ua?`（${uaKind(v.h.by_ua)}）`:""}</div></>)
+              :(<><div style={{fontSize:14,fontWeight:700}}>{fmtJst(v.at)} <span style={{fontSize:12,fontWeight:600,color:"#666"}}>{v.src==="storage"?"倉庫の控え":"この端末の控え"}</span></div>
+                <div style={{fontSize:12,color:"#666"}}>{v.np!==undefined?`測点${v.np}・写真${v.nph}枚`:""}{v.dev?`（${v.dev}）`:""}</div></>)}
+            </div>
+            <button style={{...rcBtn,padding:"8px 10px",fontSize:13}} onClick={()=>rcRestoreVersion(v)}>足りない分を戻す</button></div>))}
+          {(rc.history||[]).length>(rc.histN||40)&&<button style={{...rcBtn,width:"100%",marginTop:8,background:"#fff"}} onClick={()=>setRc(r=>({...r,histN:(r.histN||40)+40}))}>もっと見る</button>}
+        </div>
+
+        <div style={rcBox}><div style={{fontSize:15,fontWeight:800,marginBottom:6}}>③ 倉庫の写真と照合</div>
           <div style={{fontSize:12,color:"#666",marginBottom:8}}>倉庫にあるのに、この工事に入っていない写真を探して元の測点・工程に戻します。</div>
           <button style={rcBtn} disabled={rc.scanLoading} onClick={rcScanStorage}>{rc.scanLoading?"調べています…":rc.scanned?"もう一度調べる":"調べる"}</button>
           {rc.scanErr&&<div style={{color:"#C62828",fontSize:13,marginTop:6}}>{rc.scanErr}</div>}
           {rc.scanned&&<div style={{marginTop:10}}>
             <div style={{fontSize:13,fontWeight:700}}>倉庫の写真 {rc.total}枚 のうち、入っていない写真 {(rc.orphans||[]).length}枚</div>
+            {(rc.orphans||[]).some(o=>!(rc.sel&&rc.sel[o.url]))&&<div style={{fontSize:12,color:"#888"}}>今その場所に写真がある分と、同じ場所の古い写真（テスト撮影など）は、チェックを外してあります</div>}
             {(rc.dups||[]).length>0&&<div style={{fontSize:12,color:"#888"}}>同じ写真の二重送信 {(rc.dups||[]).length}枚 は取り込みません</div>}
             {(rc.unknown||[]).length>0&&<div style={{fontSize:12,color:"#888"}}>場所が分からない写真 {(rc.unknown||[]).length}枚（今の工程にない）</div>}
             {(rc.orphans||[]).map(o=>(<label key={o.url} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid #eee",cursor:"pointer"}}>
@@ -1400,18 +1813,7 @@ export default function App(){
           </div>}
         </div>
 
-        <div style={rcBox}><div style={{fontSize:15,fontWeight:800,marginBottom:6}}>② クラウドの履歴（上書き前の版）</div>
-          <div style={{fontSize:12,color:"#666",marginBottom:8}}>選んだ時点の版から、今足りない測点・写真・入力値だけを足します。</div>
-          <button style={rcBtn} disabled={rc.histLoading} onClick={rcLoadHistory}>{rc.histLoading?"読み込み中…":rc.history?"更新":"履歴を見る"}</button>
-          {rc.histErr&&<div style={{color:"#C62828",fontSize:13,marginTop:6}}>{rc.histErr}</div>}
-          {rc.history&&rc.history.length===0&&<div style={{fontSize:13,color:"#888",marginTop:8}}>まだ履歴はありません（保存のたびに10分ごとに残ります）</div>}
-          {(rc.history||[]).map(h=>(<div key={h.hid} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid #eee"}}>
-            <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:700}}>{fmtJst(h.archived_at)} <span style={{fontSize:12,fontWeight:600,color:h.reason==="guard"?"#C62828":"#666"}}>{reasonLabel[h.reason]||h.reason}</span></div>
-              <div style={{fontSize:12,color:"#666"}}>測点{h.n_points}・写真{h.n_photos}枚{h.new_n_points!==null&&h.new_n_points!==undefined?` → 上書き後 測点${h.new_n_points}・写真${h.new_n_photos}枚`:""}{h.by_device?`（${h.by_device}）`:h.by_ua?`（${uaKind(h.by_ua)}）`:""}</div></div>
-            <button style={{...rcBtn,padding:"8px 10px",fontSize:13}} onClick={()=>rcRestoreVersion(h)}>足りない分を戻す</button></div>))}
-        </div>
-
-        <div style={rcBox}><div style={{fontSize:15,fontWeight:800,marginBottom:6}}>③ ゴミ箱（消した写真）</div>
+        <div style={rcBox}><div style={{fontSize:15,fontWeight:800,marginBottom:6}}>④ ゴミ箱（消した写真）</div>
           {(()=>{const list=(photoTrash||[]).filter(trashActive).slice().sort((a,b)=>String(b.deletedAt).localeCompare(String(a.deletedAt)));
             if(!list.length)return(<div style={{fontSize:13,color:"#888"}}>ゴミ箱は空です</div>);
             return list.map(t=>(<div key={trashKeyOf(t)} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid #eee"}}>
@@ -1420,18 +1822,29 @@ export default function App(){
               <button style={{...rcBtn,padding:"8px 12px"}} onClick={()=>rcRestoreTrash(t)}>戻す</button></div>));})()}
         </div>
 
-        <div style={rcBox}><div style={{fontSize:15,fontWeight:800,marginBottom:6}}>④ この端末の控え</div>
-          <div style={{fontSize:12,color:"#666",marginBottom:8}}>この端末で撮った写真は、クラウドに届いたと確認できるまで端末にも別に保存しています。開くたびに自動で照合します。</div>
+        <div style={rcBox}><div style={{fontSize:15,fontWeight:800,marginBottom:6}}>⑤ この端末の控え</div>
+          <div style={{fontSize:12,color:"#666",marginBottom:8}}>この端末で撮った写真（黒板入り・元写真）は、クラウドに届いたと確認できるまで端末にも別に保存しています。開くたびに自動で照合します。</div>
           <button style={rcBtn} onClick={async()=>{await rcJournal();if(hydrateRef.current)await hydrateRef.current(currentProjId);await rcJournal();}}>今すぐ照合</button>
-          {rc.journal&&<div style={{fontSize:13,marginTop:8}}>控え {rc.journal.total}件（クラウド未確認 {rc.journal.pending}件）</div>}
+          {rc.journal&&<div style={{fontSize:13,marginTop:8}}>控え {rc.journal.total}件（クラウド未確認 {rc.journal.pending}件{rc.journal.raw?`・元写真の送信待ち ${rc.journal.raw}件`:""}）</div>}
         </div>
 
-        <div style={rcBox}><div style={{fontSize:15,fontWeight:800,marginBottom:6}}>⑤ バックアップ</div>
+        <div style={rcBox}><div style={{fontSize:15,fontWeight:800,marginBottom:6}}>⑥ バックアップ</div>
           <div style={{fontSize:12,color:"#666",marginBottom:8}}>工事のデータ（写真の場所・入力値）をファイルに保存。写真そのものは倉庫にあります。</div>
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
             <button style={rcBtn} onClick={rcExport}>ファイルに保存</button>
             <button style={rcBtn} onClick={()=>importRef.current&&importRef.current.click()}>ファイルから戻す</button>
             <input ref={importRef} type="file" accept="application/json,.json" style={{display:"none"}} onChange={rcImportFile}/></div>
+        </div>
+
+        <div style={rcBox}><div style={{fontSize:15,fontWeight:800,marginBottom:6}}>⑦ 削除した工事</div>
+          <div style={{fontSize:12,color:"#666",marginBottom:8}}>≡ の一覧で削除した工事も、中身ごと残っています。ここから戻せます。</div>
+          <button style={rcBtn} disabled={rc.delLoading} onClick={rcLoadDeleted}>{rc.delLoading?"読み込み中…":rc.deleted?"更新":"削除した工事を見る"}</button>
+          {rc.delErr&&<div style={{color:"#C62828",fontSize:13,marginTop:6}}>{rc.delErr}</div>}
+          {rc.deleted&&rc.deleted.length===0&&<div style={{fontSize:13,color:"#888",marginTop:8}}>削除した工事はありません</div>}
+          {(rc.deleted||[]).map(x=>(<div key={x.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid #eee"}}>
+            <div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.name||"(名称未設定)"}</div>
+              <div style={{fontSize:12,color:"#666"}}>{x.deleted_at?`${fmtJst(x.deleted_at)} に削除・`:""}測点{x.n_points}・写真{x.n_photos}枚</div></div>
+            <button style={{...rcBtn,padding:"8px 10px",fontSize:13}} onClick={()=>rcRestoreDeleted(x)}>この工事を戻す</button></div>))}
         </div>
         <div style={{fontSize:12,color:"#888",textAlign:"center"}}>この端末の名前：{devLabel}　<button onClick={renameDevice} style={{...S.sm,fontSize:12}}>変更</button></div>
       </div>
@@ -1473,10 +1886,13 @@ export default function App(){
     return parts.join(" ");
   };
   // 保存: 写真をいったん端末内データで反映 → 自動同期が倉庫(Storage)へ送ってURLに置き換える
-  const applyShot=(t,data)=>{
-    const rec={id:genUUID(),data,time:nowTime()};
+  const applyShot=(t,data,extra)=>{
+    const ex=extra||{};
+    // 撮影情報（日時など）は写真の記録に付ける。元写真（黒板なし）は端末の控えに置き、同期の時に倉庫の raw/ へ送る
+    const rec={id:genUUID(),data,time:nowTime(),...(ex.exif?{exif:ex.exif}:{})};
+    if(ex.plain)rec.raw="idb:"+rec.id;
     // 端末の控えにも同時に保存（クラウドに届いたと確認できるまで消さない）
-    const jb={id:rec.id,projectId:currentProjId,time:rec.time,date:today(),data,url:null,createdAt:Date.now(),syncedAt:null,device:deviceLabel()};
+    const jb={id:rec.id,projectId:currentProjId,time:rec.time,date:today(),data,url:null,plain:ex.plain||null,rawUrl:null,exif:ex.exif||null,createdAt:Date.now(),syncedAt:null,device:deviceLabel()};
     journalPendingRef.current.add(rec.id);
     // 端末の保存がいっぱいの時は、控えへの保存が終わってから端末保存をやり直す（写真は控え参照に置き換わる）
     const afterJ=(ok)=>{if(ok&&localWriteFull)setTimeout(()=>{mirrorLocal(currentProjIdRef.current,stateRef.current,null,true);},50);};
@@ -1488,7 +1904,7 @@ export default function App(){
   const trashOf=(ph,ctx)=>({...ph,...ctx,deletedAt:new Date().toISOString(),restoredAt:null,by:deviceLabel()});
   const toTrash=(entries)=>{if(!entries.length)return;setPhotoTrash(t=>unionTrash(t,entries));setToast(entries.length>1?`${entries.length}枚をゴミ箱へ（🛟から戻せます）`:"ゴミ箱へ移しました（🛟から戻せます）");setTimeout(()=>setToast(""),2500);};
   useEffect(()=>{if(!pendingShot)return;const o=document.body.style.overflow;document.body.style.overflow="hidden";return()=>{document.body.style.overflow=o;};},[!!pendingShot]);
-  const saveShot=()=>{const ps=pendingShot;if(!ps||!ps.data)return;applyShot(ps.tgt,ps.data);setPendingShot(null);setToast("保存しました");setTimeout(()=>setToast(""),1800);};
+  const saveShot=()=>{const ps=pendingShot;if(!ps||!ps.data)return;applyShot(ps.tgt,ps.data,{plain:ps.plain,exif:ps.exif});setPendingShot(null);setToast("保存しました");setTimeout(()=>setToast(""),1800);};
   const retakeShot=()=>{setPendingShot(null);if(fileRef.current){fileRef.current.value="";fileRef.current.click();}};
   const cancelShot=()=>{setPendingShot(null);};
   // 確認画面: 端末と向きでレイアウト切替（iPhone縦=写真+黒板拡大／iPhone横=左右／タブレット=写真1枚）
@@ -1562,15 +1978,22 @@ export default function App(){
   const onPhotoTaken=(e)=>{
     const file=e.target.files?.[0];if(!file||(photoStep===null&&!albumTarget&&!checkTarget))return;
     setPendingShot({loading:true});
+    // 撮影情報（EXIF：撮影日時・機種・位置）を読む。読めなくても撮影は続ける
+    const shotAt=new Date().toISOString();
+    const exifP=(async()=>{try{const b=await file.slice(0,262144).arrayBuffer();return readExif(b);}catch(err){return null;}})();
     const reader=new FileReader();
     reader.onload=(ev)=>{
       const img=new Image();
-      img.onload=()=>{
+      img.onload=async()=>{
         const canvas=document.createElement("canvas");
         const MAXPX=1600;const sc=Math.min(1,MAXPX/Math.max(img.width,img.height));
         canvas.width=Math.round(img.width*sc);canvas.height=Math.round(img.height*sc);
         const ctx=canvas.getContext("2d");
         ctx.drawImage(img,0,0,canvas.width,canvas.height);
+        // 黒板を入れる前の元写真（同じ大きさ）を残す。埋め戻した後に測点名の間違いに気づいても、元写真から作り直せる
+        let plain=null;try{plain=canvas.toDataURL("image/jpeg",0.82);}catch(err){plain=null;}
+        let exif=null;try{exif=await exifP;}catch(err){exif=null;}
+        exif={...(exif||{}),shotAt,...(file.lastModified?{fileTime:new Date(file.lastModified).toISOString()}:{}),w:img.width,h:img.height,...(file.size?{bytes:file.size}:{})};
         const cw=canvas.width,chh=canvas.height;
         // 黒板（左下）。内容量に合わせて高さ可変、工事名などは2行まで折り返し
         const FF=`"Hiragino Sans","MS Gothic",sans-serif`;
@@ -1696,7 +2119,7 @@ export default function App(){
         try{const m=Math.round(bbW*0.03);const x0=Math.max(0,bbX-m),y0=Math.max(0,bbY-m);const w=Math.min(cw-x0,bbW+m*2),h=Math.min(chh-y0,bbH+m*2);
           const c2=document.createElement("canvas");c2.width=w;c2.height=h;c2.getContext("2d").drawImage(canvas,x0,y0,w,h,0,0,w,h);boardData=c2.toDataURL("image/jpeg",0.92);}catch(e){}
         setPreviewZoom(false);
-        setPendingShot({data:canvas.toDataURL("image/jpeg",0.85),boardData,label,tgt:{kind:checkTarget?"check":albumTarget?"album":"step",checkTarget,album:albumTarget?{...albumTarget}:null,photoStep,note:checkTarget?composeNote(checkTarget):""}});
+        setPendingShot({data:canvas.toDataURL("image/jpeg",0.85),boardData,label,plain,exif,tgt:{kind:checkTarget?"check":albumTarget?"album":"step",checkTarget,album:albumTarget?{...albumTarget}:null,photoStep,note:checkTarget?composeNote(checkTarget):""}});
       };
       img.src=ev.target.result;
     };
@@ -1757,13 +2180,14 @@ export default function App(){
       <button style={S.pri} onClick={()=>setScreen("check")}>📷 撮影スタート →</button>
     </>}
     {workMode==="public"&&<>
-    <div style={S.c}><div style={S.ch}>管種</div><div style={{display:"flex",gap:6}}>
+    {typeLocked&&<div style={{...S.c,background:"#FFF8E1",border:"1px solid #FFCC80",fontSize:13,color:"#8D6E00",fontWeight:700}}>🔒 出来形の入力があるので、管種・道路・路面は変えられません（数字や写真が別の工程にずれないように）</div>}
+    <div style={{...S.c,...(typeLocked?{opacity:.55}:{})}}><div style={S.ch}>管種</div><div style={{display:"flex",gap:6}}>
       {["DCIP","HPPE"].map(k=>(<button key={k} onClick={()=>selPipe(k)} style={{...S.sel,flex:1,...(pipeType===k?S.selOn:{})}}><div style={{fontSize:14,fontWeight:700}}>{PL[k]}</div><div style={{fontSize:12,opacity:.6}}>{k==="DCIP"?"ダクタイル鋳鉄管":"ポリエチレン管"}</div></button>))}
       <button onClick={()=>selPipe("SHIKIRI")} style={{...S.sel,flex:.7,...(pipeType==="SHIKIRI"?S.selOn:{})}}><div style={{fontSize:12,fontWeight:700}}>仕切弁筐</div></button></div></div>
     {pipeType!=="SHIKIRI"&&<>
-      <div style={S.c}><div style={S.ch}>道路種別</div><div style={{display:"flex",gap:8}}>
+      <div style={{...S.c,...(typeLocked?{opacity:.55}:{})}}><div style={S.ch}>道路種別</div><div style={{display:"flex",gap:8}}>
         {ROADS.map(r=>(<button key={r.key} onClick={()=>selRoad(r.key)} style={{...S.rb,...(roadType===r.key?S.rbOn:{})}}><span style={{fontSize:22,fontWeight:700}}>{r.label}</span><span style={{fontSize:12,opacity:.7}}>D={r.D}</span></button>))}</div></div>
-      <div style={S.c}><div style={S.ch}>路面</div><div style={{display:"flex",gap:8}}>
+      <div style={{...S.c,...(typeLocked?{opacity:.55}:{})}}><div style={S.ch}>路面</div><div style={{display:"flex",gap:8}}>
         {SURFACES.map(sf=>(<button key={sf.key} onClick={()=>selSurface(sf.key)} style={{...S.sfb,...(surfaceType===sf.key?S.sfbOn:{})}}><span style={{fontSize:16,fontWeight:700}}>{sf.label}</span><span style={{fontSize:12,opacity:.6}}>{sf.key==="asphalt"?"舗装あり":"舗装なし"}</span></button>))}</div></div>
       <div style={S.c}><div style={S.ch}>口径</div><div style={{display:"flex",flexWrap:"wrap",gap:6}}>
         {dias.map(d=>(<button key={d} onClick={()=>setHeader(h=>({...h,diameter:d}))} style={{...S.db,...(dia===d?S.dbOn:{})}}><div style={{fontSize:15,fontWeight:700}}>φ{d}</div><div style={{fontSize:12,opacity:.6}}>OD {getOD(pipeType,d)}</div></button>))}</div></div>
