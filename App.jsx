@@ -81,7 +81,7 @@ function getOD(p,d){return(p==="DCIP"?OD_DCIP:p==="HPPE"?OD_HPPE:{})[d]||0;}
 function getDias(p){return p==="DCIP"?DIAS_DCIP:p==="HPPE"?DIAS_HPPE:[];}
 function calcH0(p,D,d){const od=getOD(p,d);return p==="HPPE"?D+od+100:D+od;}
 const FM={H:{label:"深さ",minus:30,plus:30},B:{label:"幅",minus:50,plus:null},Ba:{label:"舗装幅",minus:25,plus:null},D:{label:"埋設深",minus:30,plus:30},D2:{label:"埋設深②",minus:30,plus:30},ta:{label:"舗装厚",minus:7,plus:null},t0:{label:"基礎砂",minus:30,plus:30},t1:{label:"保護砂",minus:30,plus:30},t2:{label:"発生土",minus:30,plus:30},t3:{label:"発生土",minus:30,plus:30},t4:{label:"発生土",minus:30,plus:30},t5:{label:"路盤",minus:30,plus:30},t6:{label:"路盤",minus:30,plus:30},t7:{label:"路盤",minus:30,plus:30},A:{label:"弁芯距離",minus:null,plus:25},Hs:{label:"シート",minus:30,plus:30},Dm:{label:"マーカー",minus:30,plus:30}};
-const APP_VERSION="2.1.7";
+const APP_VERSION="2.1.8";
 const PL={DCIP:"DCIP(GX)",HPPE:"HPPE",SHIKIRI:"仕切弁筐"};
 // キーワード判定（URLの ?ky=shinano でも解除。一度解除した端末は記憶）
 function kwOk(v){const t=String(v||"").trim();return t.toLowerCase()==="shinano"||t==="信濃";}
@@ -135,9 +135,11 @@ function calcTm(step,steps,meas){if(!step||!step.tKey||step.prevRef===null||step
 // Hs/Dm 自動計算: シート・ピンは発生土①天端 → Dm=そのH, Hs=実測D①−H
 function autoExtra(ex,step,steps,meas){if(!ex||!step||!meas)return null;const h=meas[`${step.id}_H`];if(h===undefined||h===""||isNaN(Number(h)))return null;if(ex.key==="Dm")return Math.round(Number(h));if(ex.key==="Hs"){const dm=measuredD(steps,meas);if(dm===null)return null;return Math.round(dm-Number(h));}const v=meas[`${step.id}_${ex.key}`];return(v===undefined||v==="")?null:Number(v);}
 // 設計H（全画面・黒板・PDF共通）
-//  掘削=H0／基礎砂=H0−t0／砂〜発生土=実測D①(未入力なら設計D)−累計t
+//  掘削=H0／基礎砂=H0−t0
+//  砂（管のすぐ上の層）=実測D①(未入力なら設計D)−t1
+//  発生土①から上=設計Dから測った標準のH（v2.1.8〜：土被りのズレは発生土①の厚さで吸収 → シート・ピンはいつもの深さ）
 //  路盤砕石=地表基準：舗装厚ta＋その上に残る路盤厚（最終の路盤＝舗装厚）
-//  発生土の最終層=舗装厚＋路盤全厚（砕石ゾーンへの引き渡し。Dのズレは発生土で吸収）
+//  発生土の最終層=舗装厚＋路盤全厚（砕石ゾーンへの引き渡し）
 function isRobanStep(s){return !!(s&&s.tKey&&String(s.name||"").includes("路盤"));}
 function surfaceRefKind(step,steps){if(!step||!step.tKey)return null;const robans=steps.filter(isRobanStep);if(!robans.length)return null;const ri=robans.findIndex(x=>x.id===step.id);if(ri>=0)return ri===robans.length-1?"ta":"ta+roban";const fills=steps.filter(x=>x.tKey&&x.tKey!=="t0"&&!isRobanStep(x));if(fills.length&&fills[fills.length-1].id===step.id)return "handoff";return null;}
 function designHFor(step,steps,design,H0,D,measured,surfaceType){
@@ -150,11 +152,119 @@ function designHFor(step,steps,design,H0,D,measured,surfaceType){
   if(kind==="ta"||kind==="ta+roban"){const ri=robans.findIndex(x=>x.id===step.id);return Math.round(taD+robans.slice(ri+1).reduce((acc,x)=>acc+(Number(design[x.tKey])||0),0));}
   if(kind==="handoff")return Math.round(taD+robans.reduce((acc,x)=>acc+(Number(design[x.tKey])||0),0));
   const dm=measuredD(steps,measured);
-  let h=dm!==null?dm:D;let ap=false;
+  const sand=sandStepOf(steps);
+  const sandTop=sand?(dm!==null?dm:D)-(Number(design[sand.tKey])||0):null;
+  if(sand&&step.id===sand.id)return Math.round(sandTop);
+  let h=D;let ap=false;
   for(const x of steps){if(x.inputs.includes("D")){ap=true;continue;}if(!ap)continue;if(typeof x.id==="number"&&typeof step.id==="number"&&x.id>step.id)break;if(x.tKey&&x.tKey!=="t0"&&design[x.tKey])h-=Number(design[x.tKey]);}
+  // 一応：土被りがかなり浅くて砂の天端が標準のHより浅くなる時は、厚さがマイナスにならないよう砂の天端に合わせる
+  if(sandTop!==null&&h>sandTop)h=sandTop;
   return Math.round(h);
 }
+// 砂（管のすぐ上の層＝実測Dから測る層）
+function sandStepOf(steps){return (steps||[]).find(x=>x&&x.prevRef==="D"&&x.tKey)||null;}
+// 土被りのズレを吸収する層（砂の次の層＝発生土①）
+function absorbStepOf(steps){const sd=sandStepOf(steps);if(!sd)return null;return (steps||[]).find(x=>x&&x.tKey&&x.prevRef===sd.id&&!isRobanStep(x))||null;}
 function judge(e,f,m){const meta=m||FM[f];if(!meta||e===null||isNaN(e))return null;if(meta.minus!==null&&e<-meta.minus)return"×";if(meta.plus!==null&&e>meta.plus)return"×";return"○";}
+// ═══ 狙いH（v2.1.8）═══
+// 層ごとに「ここに仕上げれば全部○」になるHの範囲を出す。満たす条件：
+//  H（設計H±30）／厚さt（前の層の実測H、砂は実測D①からの厚さ±30）／シートHs（実測D①−H＝300±30）／ピンDm（H＝700±30）／
+//  最後の路盤は舗装厚の下限（舗装厚≒最後の路盤のH）
+// 前から：実測済みの層はその値から、まだの層は前の層の範囲から順に計算する
+// 後ろから：次の層に余裕（WIN_NARROW）が残るように、手前の層の狙いを絞る（砂を厚くしすぎて発生土①が窮屈になる、などを先に防ぐ）
+const WIN_NARROW=20; // 狙いの幅がこれ未満なら「余裕が少ない」
+function planWindows(steps,design,H0,D,measured,surfaceType){
+  const meas=measured||{};
+  const num=(v)=>(v===undefined||v===null||v===""||isNaN(Number(v)))?null:Number(v);
+  const dM=measuredD(steps,meas);
+  const taD=surfaceType==="gravel"?0:(Number(design.ta)||40);
+  const robans=steps.filter(isRobanStep);const lastRoban=robans.length?robans[robans.length-1]:null;
+  const chain=steps.filter(s=>s&&!s.photoOnly&&s.inputs&&s.inputs.includes("H"));
+  const info={};
+  // その層だけで決まる条件（H・ピン・シート・舗装厚）
+  for(const s of chain){
+    const dH=designHFor(s,steps,design,H0,D,meas,surfaceType);
+    if(dH===null||dH===undefined||isNaN(dH))continue;
+    let lo=dH-FM.H.minus,hi=dH+FM.H.plus;const why=["H"];
+    for(const ex of (s.extra||[])){
+      if(ex.key==="Dm"){lo=Math.max(lo,ex.design-ex.minus);hi=Math.min(hi,ex.design+ex.plus);why.push("Dm");}
+      else if(ex.key==="Hs"&&dM!==null){lo=Math.max(lo,dM-ex.design-ex.plus);hi=Math.min(hi,dM-ex.design+ex.minus);why.push("Hs");}
+    }
+    if(lastRoban&&s.id===lastRoban.id&&taD>0&&FM.ta.minus!==null){lo=Math.max(lo,taD-FM.ta.minus);why.push("ta");}
+    const tRaw=s.tKey?design[s.tKey]:undefined;
+    const tD=(s.tKey&&s.prevRef!==null&&s.prevRef!==undefined&&tRaw!==undefined&&tRaw!==null&&tRaw!==""&&!isNaN(Number(tRaw)))?Number(tRaw):null;
+    info[s.id]={dH:Math.round(dH),B:{lo,hi},why,tD,fm:(s.tKey&&FM[s.tKey])||{minus:30,plus:30},m:num(meas[`${s.id}_H`])};
+  }
+  // 前から（厚さtは前の層の実測、まだなら前の層の範囲から）
+  const F={};
+  for(const s of chain){const I=info[s.id];if(!I)continue;
+    let {lo,hi}=I.B;
+    if(I.tD!==null){
+      let P=null;
+      if(s.prevRef==="D"){if(dM!==null)P={lo:dM,hi:dM};}
+      else{const pi=info[s.prevRef];if(pi)P=pi.m!==null?{lo:pi.m,hi:pi.m}:((F[s.prevRef]&&F[s.prevRef].lo<=F[s.prevRef].hi)?F[s.prevRef]:pi.B);}
+      if(P){if(I.fm.plus!==null)lo=Math.max(lo,P.lo-I.tD-I.fm.plus);if(I.fm.minus!==null)hi=Math.min(hi,P.hi-I.tD+I.fm.minus);if(!I.why.includes("t"))I.why.push("t");}
+    }
+    F[s.id]={lo,hi};
+  }
+  // 後ろから（次の層が○になる余地を margin mm 以上残す）
+  const back=(margin)=>{
+    const G={};
+    for(let i=chain.length-1;i>=0;i--){const s=chain[i];const I=info[s.id];if(!I)continue;
+      let {lo,hi}=F[s.id];
+      const n=chain.find(x=>x.prevRef===s.id&&info[x.id]&&info[x.id].tD!==null);
+      if(n&&I.m===null){const N=info[n.id];
+        if(N.m!==null){if(N.fm.minus!==null)lo=Math.max(lo,N.m+N.tD-N.fm.minus);if(N.fm.plus!==null)hi=Math.min(hi,N.m+N.tD+N.fm.plus);}
+        else{const A=G[n.id];if(A&&A.lo<=A.hi){const mm=Math.min(margin,A.hi-A.lo);
+          if(N.fm.minus!==null)lo=Math.max(lo,A.lo+mm+N.tD-N.fm.minus);if(N.fm.plus!==null)hi=Math.min(hi,A.hi-mm+N.tD+N.fm.plus);}}
+      }
+      G[s.id]={lo,hi};
+    }
+    return G;
+  };
+  const G0=back(0),G1=back(WIN_NARROW);
+  const out={};
+  for(const s of chain){const I=info[s.id];if(!I)continue;
+    const f=F[s.id],g0=G0[s.id],g1=G1[s.id];
+    const okF=Math.ceil(g0.lo)<=Math.floor(g0.hi);
+    const comfy=Math.ceil(g1.lo)<=Math.floor(g1.hi);
+    const pick=comfy?g1:g0;const lo=Math.ceil(pick.lo),hi=Math.floor(pick.hi);
+    const room=okF?Math.floor(g0.hi)-Math.ceil(g0.lo):-1;
+    out[s.id]={lo,hi,ok:okF,tight:okF&&(!comfy||room<WIN_NARROW),room,dH:I.dH,why:I.why,measured:I.m,
+      ahead:okF&&(lo>Math.ceil(f.lo)||hi<Math.floor(f.hi)),own:{lo:Math.ceil(f.lo),hi:Math.floor(f.hi)}};
+  }
+  return out;
+}
+// 「あとで×になりそう」：実測を入れた層（D・H）ごとに、その後のまだ入れていない層を見て
+//  範囲が無い（どう仕上げても×）→ng／範囲が狭い（WIN_NARROW未満）→warn
+//  最後の路盤は、Hが○でも舗装厚の下限に届かない時（このままだと舗装で×）→ng
+function laterRisks(steps,win,measured,design,surfaceType){
+  const meas=measured||{};const out={};
+  const has=(k)=>meas[k]!==undefined&&meas[k]!==null&&meas[k]!==""&&!isNaN(Number(meas[k]));
+  const taD=surfaceType==="gravel"?0:(Number(design&&design.ta)||40);
+  const robans=steps.filter(isRobanStep);const lastRoban=robans.length?robans[robans.length-1]:null;
+  const pave=steps.find(s=>s&&!s.photoOnly&&s.inputs&&s.inputs.includes("ta"));
+  let cause=null;
+  const put=(r)=>{if(cause===null)return;const o=out[cause];if(!o||(o.kind==="warn"&&r.kind==="ng"))out[cause]=r;};
+  for(const s of steps){
+    if(!s||s.photoOnly||!s.inputs)continue;
+    if(s.inputs.includes("D")){if(has(`${s.id}_D`))cause=s.id;continue;}
+    if(!s.inputs.includes("H"))continue;
+    if(has(`${s.id}_H`)){
+      cause=s.id;
+      if(lastRoban&&s.id===lastRoban.id&&taD>0&&pave&&!has(`${pave.id}_ta`)&&FM.ta.minus!==null){
+        const h=Number(meas[`${s.id}_H`]);const need=taD-FM.ta.minus;
+        if(h<need)put({kind:"ng",target:pave.id,pave:true,need,h:Math.round(h*10)/10});
+      }
+      continue;
+    }
+    const w=win[s.id];if(!w||cause===null)continue;
+    if(!w.ok)put({kind:"ng",target:s.id,lo:w.lo,hi:w.hi});
+    else if(w.tight)put({kind:"warn",target:s.id,lo:w.lo,hi:w.hi});
+  }
+  return out;
+}
+const WHY_LABEL={H:"H",t:"厚さ",Hs:"シート",Dm:"ピン",ta:"舗装厚"};
 function today(){const d=new Date();return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
 function nowTime(){return new Date().toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"});}
 
@@ -1548,7 +1658,7 @@ export default function App(){
     if(!(points||[]).some(hasPtData))return true;return window.confirm("この工事には入力済みの測点があります。\n\n変更しても測点・写真は消えません。\n各層の設計厚は新しい種別の初期値になります。\n\n変更しますか？");};
 
   const calcDesignH=(sid,measured)=>designHFor(steps.find(s=>s.id===sid),steps,design,H0,D,measured||cur.measured,surfaceType);
-  const dv=(f,sid)=>{if(f==="H")return calcDesignH(sid);if(f==="B")return design.B?Number(design.B):null;if(f==="Ba")return design.Ba?Number(design.Ba):null;if(f==="D")return D;if(f==="D2")return D2;if(f==="ta")return Number(design.ta)||40;return design[f]?Number(design[f]):null;};
+  const dv=(f,sid,m)=>{if(f==="H")return calcDesignH(sid,m);if(f==="B")return design.B?Number(design.B):null;if(f==="Ba")return design.Ba?Number(design.Ba):null;if(f==="D")return D;if(f==="D2")return D2;if(f==="ta")return Number(design.ta)||40;return design[f]?Number(design[f]):null;};
   const calcT=(step,meas)=>calcTm(step,steps,meas);
   const prevLbl=(step)=>{if(!step.prevRef)return"";if(step.prevRef==="D"){const ds=steps.find(s=>s.inputs.includes("D"));return`D(${ds?.id})−H(${step.id})`;}return`H(${step.prevRef})−H(${step.id})`;};
 
@@ -2273,7 +2383,7 @@ export default function App(){
     <div style={S.c}><div style={S.ch}>各工程の設計H</div>
       {steps.map(s=>{if(!s.inputs.includes("H"))return null;return(<div key={s.id} style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
         <span style={S.sd}>{s.id}</span><span style={{flex:1,fontSize:13}}>{s.name}</span>
-        <span style={{fontSize:14,fontWeight:700,color:s.id===1?"#E65100":"#1565C0"}}>H={calcDesignH(s.id)}</span></div>);})}
+        <span style={{fontSize:14,fontWeight:700,color:s.id===1?"#E65100":"#1565C0"}}>H={calcDesignH(s.id,{})}</span></div>);})}
     </div>
     <button style={S.pri} onClick={()=>{if(!points.length)setScreen("bulk");else setScreen("list");}}>{!points.length?"測点作成 →":"現場入力 →"}</button></div>);}
 
@@ -2293,6 +2403,30 @@ export default function App(){
     const firstOpen=mergedSteps.findIndex(st=>doneState(st)!=="done");
     const jumpTo=(i)=>{const el=document.getElementById(`stepcard-${i}`);if(el)el.scrollIntoView({behavior:"smooth",block:"start"});};
     const stCol=(d)=>d==="done"?"#2E7D32":d==="partial"?"#F9A825":"#ccc";
+    // 狙いH と「あとで×になりそう」（v2.1.8）
+    const winMap=planWindows(steps,design,H0,D,cur.measured,surfaceType);
+    const riskMap=laterRisks(steps,winMap,cur.measured,design,surfaceType);
+    const stepLabel=(id)=>{const s=steps.find(x=>x.id===id);return s?`${s.id}.${s.name}`:"";};
+    const whyText=(w)=>Array.from(new Set((w.why||[]).map(k=>WHY_LABEL[k]).filter(Boolean))).join("・");
+    const hasM=(k)=>{const v=cur.measured[k];return v!==undefined&&v!==null&&v!==""&&!isNaN(Number(v));};
+    const fmtWin=(lo,hi)=>(lo===hi?`${lo} ちょうど`:`${lo}〜${hi}`)+(lo<0?"（マイナスは地表より上）":"");
+    const boxS=(tone)=>({marginTop:6,padding:"8px 10px",borderRadius:8,fontSize:13,fontWeight:700,lineHeight:1.45,
+      background:tone==="ng"?"#FFEBEE":tone==="warn"?"#FFF8E1":"#E3F2FD",border:`1px solid ${tone==="ng"?"#C62828":tone==="warn"?"#F9A825":"#1565C0"}55`,color:tone==="ng"?"#B71C1C":tone==="warn"?"#E65100":"#0D47A1"});
+    const aimBox=(step)=>{
+      const w=step.tKey?winMap[step.id]:null;if(!w||w.measured!==null)return null;
+      const ready=step.prevRef==="D"?measuredD(steps,cur.measured)!==null:(step.prevRef!==null&&step.prevRef!==undefined&&hasM(`${step.prevRef}_H`));
+      const narrowed=(w.hi-w.lo)<(FM.H.minus+FM.H.plus);
+      if(!w.ok){const ownBad=w.own.lo>w.own.hi;return(<div style={boxS("ng")}>🔴 {ownBad?<>この層は、どう仕上げても×が出ます（{whyText(w)}が同時に○になりません）</>:<>この層をどう仕上げても、このあとの層で×が出ます</>}<div style={{fontSize:11,fontWeight:500,color:"#555"}}>前の層やDを直せるなら今のうち</div></div>);}
+      if(!ready&&!narrowed)return null;
+      return(<div style={boxS(w.tight?"warn":"aim")}>🎯 狙いH {fmtWin(w.lo,w.hi)}{w.tight?`　⚠ 余裕${Math.max(0,w.room)}mm`:""}<div style={{fontSize:11,fontWeight:500,color:"#555"}}>この範囲に仕上げれば {whyText(w)} が全部○{w.ahead?"（次の層の余裕も残る範囲）":""}</div></div>);
+    };
+    const riskBox=(step)=>{
+      const r=riskMap[step.id];if(!r)return null;
+      if(r.pave)return(<div style={boxS("ng")}>🔴 このHのままだと、舗装厚が足りません（舗装は {r.need}mm 以上必要、今のHだと約 {r.h}mm）<div style={{fontSize:11,fontWeight:500,color:"#555"}}>直すなら舗装の前に</div></div>);
+      if(r.kind==="ng")return(<div style={boxS("ng")}>🔴 この値のままだと、あとで「{stepLabel(r.target)}」で×が出ます（どう仕上げても全部○になりません）<div style={{fontSize:11,fontWeight:500,color:"#555"}}>直すなら今のうち</div></div>);
+      const rw=winMap[r.target];const room=rw?Math.max(0,rw.room):Math.max(0,r.hi-r.lo);
+      return(<div style={boxS("warn")}>⚠ この値だと「{stepLabel(r.target)}」の余裕が {room}mm しかありません（狙いH {fmtWin(r.lo,r.hi)}）</div>);
+    };
     return(<div style={{...S.w,zoom:fontScale}}>
     <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={onPhotoTaken}/>
     <div style={S.top}><button style={S.bk} onClick={()=>setScreen("list")}>← 戻る</button><span style={S.bg}>{cur.name}</span></div>
@@ -2361,7 +2495,8 @@ export default function App(){
         }
         const taNeed=surfaceType==="asphalt"?(Number(design.ta)||40):0;
         const need=zk==="A"?steps.filter(s2=>zoneOf(s2)==="B").reduce((a,s2)=>a+(Number(design[s2.tKey])||0),0)+taNeed:taNeed;
-        return{zk,isLast,remainLayers,cum,hM,need};
+        const nextId=idx>=0&&idx<zsteps.length-1?zsteps[idx+1].id:null;
+        return{zk,isLast,remainLayers,cum,hM,need,nextId};
       })();
       const dState=dSt;
       return(<div key={step.id} id={`stepcard-${stepIdx}`} style={{...S.c,borderLeft:`5px solid ${isNext?"#1565C0":stCol(dState)}`,background:dState==="done"?"#F1F8E9":isNext?"#F5F9FF":S.c.background,scrollMarginTop:90,...cardFrame}}>
@@ -2375,10 +2510,12 @@ export default function App(){
           const d=dv(f,step.id);const key=`${step.id}_${f}`;const mv=cur.measured[key]??"";
           const err=d!==null&&mv!==""?Number(mv)-Number(d):null;const j=err!==null?judge(err,f):null;
           return(<div key={f} style={S.er}>
-            <div style={{flex:1.2}}><span style={{fontSize:16,fontWeight:700}}>{fl(f)}</span><div style={{fontSize:12,color:"#1565C0",fontWeight:600}}>{d!==null?Math.round(d):"—"}<span style={{fontSize:12,color:"#999",marginLeft:4}}>({crit(f)})</span>{f==="H"&&step.id!==1&&!(step.tKey==="t0")&&(()=>{const k=surfaceRefKind(steps.find(x=>x.id===step.id)||step,steps);if(k==="ta")return(<span style={{fontSize:11,color:"#1565C0",marginLeft:4,fontWeight:700}}>＝舗装厚</span>);if(k==="ta+roban")return(<span style={{fontSize:11,color:"#1565C0",marginLeft:4,fontWeight:700}}>＝舗装厚＋路盤</span>);if(k==="handoff")return(<span style={{fontSize:11,color:"#1565C0",marginLeft:4,fontWeight:700}}>＝舗装厚＋路盤全厚</span>);return measuredD(steps,cur.measured)!==null?(<span style={{fontSize:11,color:"#E65100",marginLeft:4}}>実測D起点</span>):null;})()}</div></div>
+            <div style={{flex:1.2}}><span style={{fontSize:16,fontWeight:700}}>{fl(f)}</span><div style={{fontSize:12,color:"#1565C0",fontWeight:600}}>{d!==null?Math.round(d):"—"}<span style={{fontSize:12,color:"#999",marginLeft:4}}>({crit(f)})</span>{f==="H"&&step.id!==1&&!(step.tKey==="t0")&&(()=>{const k=surfaceRefKind(steps.find(x=>x.id===step.id)||step,steps);if(k==="ta")return(<span style={{fontSize:11,color:"#1565C0",marginLeft:4,fontWeight:700}}>＝舗装厚</span>);if(k==="ta+roban")return(<span style={{fontSize:11,color:"#1565C0",marginLeft:4,fontWeight:700}}>＝舗装厚＋路盤</span>);if(k==="handoff")return(<span style={{fontSize:11,color:"#1565C0",marginLeft:4,fontWeight:700}}>＝舗装厚＋路盤全厚</span>);const dmv=measuredD(steps,cur.measured);const sdS=sandStepOf(steps);if(sdS&&step.id===sdS.id)return dmv!==null?(<span style={{fontSize:11,color:"#E65100",marginLeft:4}}>実測D起点</span>):null;const abS=absorbStepOf(steps);if(abS&&step.id===abS.id&&dmv!==null&&Math.round(dmv)!==Math.round(D)){const dd=Math.round(dmv-D);return(<span style={{fontSize:11,color:"#E65100",marginLeft:4}}>Dのズレ{dd>0?"+":""}{dd}をこの層で吸収</span>);}return null;})()}</div></div>
             <div style={{flex:1.3}}><input type="number" inputMode="decimal" style={S.mi} value={mv} placeholder="実測" onChange={e=>setCur(p=>({...p,measured:{...p.measured,[key]:e.target.value}}))}/></div>
             <div style={{width:48,textAlign:"center",fontSize:14,fontWeight:700,color:err!==null?j==="×"?"#C62828":"inherit":"#ccc"}}>{err!==null?(err>0?`+${err}`:err):"—"}</div>
             <div style={{width:28,textAlign:"center",fontSize:20,fontWeight:800,color:j==="○"?"#2E7D32":j==="×"?"#C62828":"#ddd"}}>{j??"·"}</div></div>);})}
+        {aimBox(step)}
+        {riskBox(step)}
         {step.tKey&&(<div style={{marginTop:6,padding:"8px 10px",borderRadius:8,background:tJ==="○"?"#E8F5E9":tJ==="×"?"#FFEBEE":"#f5f5f5",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
           <div style={{flex:1}}><div style={{fontSize:13,fontWeight:600,color:tJ==="○"?"#2E7D32":tJ==="×"?"#C62828":"#888"}}>{step.tKey}={tM!==null?`${tM}mm`:"—"}</div>
             <div style={{fontSize:12,color:"#999"}}>{prevLbl(step)} / 設計:{tD??"-"}mm</div></div>
@@ -2393,13 +2530,15 @@ export default function App(){
           const col=lvl==="ok"?"#2E7D32":lvl==="warn"?"#E65100":"#C62828";const bg=lvl==="ok"?"#E8F5E9":lvl==="warn"?"#FFF3E0":"#FFEBEE";
           const tag=lvl==="ok"?"順調":lvl==="warn"?"⚠ 注意":"🔴 要調整";
           const sign=z.cum>0?`+${z.cum}`:`${z.cum}`;
-          const diff=Math.round(z.hM-z.need);const bad=Math.abs(diff)>30;
+          // 舗装への残り深さは舗装厚の下限（−7）で見る（路盤のHが○でも舗装厚で×になるため）
+          const rawDiff=z.hM-z.need;const diff=Math.round(rawDiff*10)/10;const bad=(z.zk==="B"&&z.need>0)?(rawDiff< -(FM.ta.minus??30)||rawDiff>30):Math.abs(rawDiff)>30;
           return(<div style={{marginTop:6,padding:"8px 10px",borderRadius:8,background:bg,border:`1px solid ${col}55`}}>
             <div style={{display:"flex",alignItems:"center",gap:6}}>
               <div style={{flex:1,fontSize:12,fontWeight:700,color:col}}>{zname} 累計 {sign}mm ／ 許容±30</div>
               <div style={{fontSize:12,fontWeight:700,color:col}}>{tag}</div></div>
-            {!z.isLast&&z.cum!==0&&<div style={{fontSize:12,color:"#555",marginTop:3}}>残り{z.remainLayers}層で {z.cum>0?"−":"+"}{a}mm 調整（1層あたり約 {z.cum>0?"−":"+"}{Math.round(a/z.remainLayers)}mm）</div>}
-            {z.isLast&&<div style={{fontSize:12,color:bad?"#C62828":"#333",marginTop:3,fontWeight:bad?700:400}}>{z.zk==="A"?"砕石ゾーンへ渡す深さ":"舗装への残り深さ"}：実測 {Math.round(z.hM)} ／ 必要 {z.need}（{diff>0?"+":""}{diff}）{bad&&z.zk==="A"&&(diff<0?" ⚠ このまま進むと路盤が薄くなります":" ⚠ 路盤が厚くなり舗装高が合いません")}{bad&&z.zk==="B"&&(diff<0?" ⚠ 舗装厚が確保できません":" ⚠ 舗装が厚くなります")}</div>}
+            {!z.isLast&&(()=>{const nw=z.nextId!==null&&z.nextId!==undefined?winMap[z.nextId]:null;if(!nw||nw.measured!==null)return null;if(riskMap[step.id]&&riskMap[step.id].target===z.nextId)return null;const tight=nw.ok&&nw.tight;
+              return(<div style={{fontSize:12,color:!nw.ok?"#C62828":tight?"#E65100":"#555",marginTop:3,fontWeight:!nw.ok||tight?700:400}}>{nw.ok?`次の「${stepLabel(z.nextId)}」の狙いH：${fmtWin(nw.lo,nw.hi)}${tight?`（余裕${Math.max(0,nw.room)}mm）`:""}`:`次の「${stepLabel(z.nextId)}」は、どう仕上げても×が出ます`}</div>);})()}
+            {z.isLast&&<div style={{fontSize:12,color:bad?"#C62828":"#333",marginTop:3,fontWeight:bad?700:400}}>{z.zk==="A"?"砕石ゾーンへ渡す深さ":"舗装への残り深さ"}：実測 {Math.round(z.hM*10)/10} ／ 必要 {z.need}（{diff>0?"+":""}{diff}）{bad&&z.zk==="A"&&(diff<0?" ⚠ このまま進むと路盤が薄くなります":" ⚠ 路盤が厚くなり舗装高が合いません")}{bad&&z.zk==="B"&&(diff<0?" ⚠ 舗装厚が確保できません":" ⚠ 舗装が厚くなります")}</div>}
           </div>);})()}
         {step.extra.map(ex=>{const av=autoExtra(ex,step,steps,cur.measured);const err=av!==null?av-ex.design:null;const j=err!==null?judge(err,ex.key,ex):null;
           const formula=ex.key==="Dm"?"＝このH":"＝実測D①−H";
@@ -2581,7 +2720,7 @@ export default function App(){
       <button style={{...S.pri,marginTop:16}} onClick={()=>setScreen("bulk")}>測点を一括作成</button></div>):(
     <>{points.map((pt,idx)=>{
       let total=0,ok=0,ng=0;
-      steps.forEach(step=>{step.inputs.forEach(f=>{total++;const d=dv(f,step.id);const key=`${step.id}_${f}`;const mv=pt.measured[key];
+      steps.forEach(step=>{step.inputs.forEach(f=>{total++;const d=dv(f,step.id,pt.measured||{});const key=`${step.id}_${f}`;const mv=pt.measured[key];
         if(d!==null&&mv&&mv!==""){const j=judge(Number(mv)-Number(d),f);if(j==="○")ok++;if(j==="×")ng++;}});
         if(step.tKey){total++;const tM=calcT(step,pt.measured);const tD=design[step.tKey]?Number(design[step.tKey]):null;if(tM!==null&&tD!==null){const j=judge(tM-tD,step.tKey);if(j==="○")ok++;if(j==="×")ng++;}}
         step.extra.forEach(ex=>{total++;const av=autoExtra(ex,step,steps,pt.measured);if(av!==null){const j=judge(av-ex.design,ex.key,ex);if(j==="○")ok++;if(j==="×")ng++;}});});
@@ -2610,7 +2749,7 @@ export default function App(){
       <button style={{...S.exp,background:"#E3F2FD",color:"#1565C0",border:"1px solid #90CAF9"}} onClick={handleStatusPDF}>施工状況写真PDF（各測点{mergedSteps.length}枚・黒板欄付き）</button>
       <button style={{...S.exp,background:"#E3F2FD",color:"#1565C0",border:"1px solid #90CAF9"}} onClick={()=>{
         let csv="\uFEFF";csv+=`工事名,${header.projectName}\n\n`;csv+=`測点,工程,項目,設計,実測,誤差,判定,日付\n`;
-        points.forEach(pt=>{steps.forEach(step=>{step.inputs.forEach(f=>{const d=dv(f,step.id);const key=`${step.id}_${f}`;const mv=pt.measured[key]??"";const err=d!==null&&mv!==""?Number(mv)-Number(d):"";const j=err!==""?judge(err,f):"";
+        points.forEach(pt=>{steps.forEach(step=>{step.inputs.forEach(f=>{const d=dv(f,step.id,pt.measured||{});const key=`${step.id}_${f}`;const mv=pt.measured[key]??"";const err=d!==null&&mv!==""?Number(mv)-Number(d):"";const j=err!==""?judge(err,f):"";
           csv+=`${pt.name},${step.name},${f},${d!==null?Math.round(d):""},${mv},${err},${j},${pt.date}\n`;});});});
         const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=`出来形_${header.projectName||"data"}.csv`;a.click();
         setToast("CSV出力完了");setTimeout(()=>setToast(""),3000);
